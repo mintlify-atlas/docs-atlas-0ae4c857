@@ -1,0 +1,356 @@
+---
+title: "Map System"
+description: "Map structure, headers, connections, and tile organization"
+---
+
+The map system defines the game's world structure, from outdoor routes to indoor buildings, with a sophisticated organization of tiles, connections, and map data.
+
+## Map Organization
+
+Maps are organized into three categories defined in `constants/map_constants.asm`:
+
+<Steps>
+  <Step title="Towns and Cities">
+    The 11 main population centers, numbered sequentially from `$00` to `$0A`.
+  </Step>
+  
+  <Step title="Routes">
+    The 25 outdoor routes connecting cities, from Route 1 to Route 25.
+  </Step>
+  
+  <Step title="Indoor and Dungeon Maps">
+    Buildings, caves, and special locations, grouped by their associated outdoor map.
+  </Step>
+</Steps>
+
+## Map Constants
+
+The `map_const` macro defines each map with its ID, width, and height:
+
+<CodeGroup>
+```asm Towns and Cities
+const_def
+map_const PALLET_TOWN,      10,  9  ; $00
+map_const VIRIDIAN_CITY,    20, 18  ; $01
+map_const PEWTER_CITY,      20, 18  ; $02
+map_const CERULEAN_CITY,    20, 18  ; $03
+map_const LAVENDER_TOWN,    10,  9  ; $04
+map_const VERMILION_CITY,   20, 18  ; $05
+map_const CELADON_CITY,     25, 18  ; $06  ; Largest city!
+map_const FUCHSIA_CITY,     20, 18  ; $07
+map_const CINNABAR_ISLAND,  10,  9  ; $08
+map_const INDIGO_PLATEAU,   10,  9  ; $09
+map_const SAFFRON_CITY,     20, 18  ; $0A
+DEF NUM_CITY_MAPS EQU const_value
+```
+
+```asm Routes
+DEF FIRST_ROUTE_MAP EQU const_value
+map_const ROUTE_1,  10, 18  ; $0C
+map_const ROUTE_2,  10, 36  ; $0D  ; Tallest map!
+map_const ROUTE_3,  35,  9  ; $0E
+map_const ROUTE_4,  45,  9  ; $0F  ; Widest route!
+; ... Routes 5-25 ...
+```
+
+```asm Indoor Maps
+DEF FIRST_INDOOR_MAP EQU const_value
+map_const REDS_HOUSE_1F,  4, 4  ; $25
+map_const REDS_HOUSE_2F,  4, 4  ; $26
+map_const BLUES_HOUSE,    4, 4  ; $27
+map_const OAKS_LAB,       5, 6  ; $28
+```
+</CodeGroup>
+
+<Note>
+The `map_const` macro automatically generates three constants:
+- `PALLET_TOWN` = `$00` (map ID)
+- `PALLET_TOWN_WIDTH` = `10` (width in tiles)
+- `PALLET_TOWN_HEIGHT` = `9` (height in tiles)
+</Note>
+
+## Map Dimensions
+
+Maps vary significantly in size:
+
+| Map Type | Typical Width | Typical Height | Example |
+|----------|--------------|----------------|----------|
+| Small Town | 10 tiles | 9 tiles | Pallet Town |
+| Large City | 20-25 tiles | 18 tiles | Celadon City |
+| Small Route | 10 tiles | 18-27 tiles | Route 1 |
+| Long Route | 10 tiles | 36-72 tiles | Route 2, Route 17 |
+| Wide Route | 30-45 tiles | 9 tiles | Route 4 |
+| Indoor | 4-7 tiles | 4-9 tiles | Red's House |
+
+<Info>
+**Route 17** (10×72 tiles) is the tallest map, representing the long bike path. **Route 4** (45×9 tiles) is the widest route.
+</Info>
+
+## Indoor Map Groups
+
+Indoor maps are grouped with their outdoor locations using `end_indoor_group`:
+
+```asm
+map_const REDS_HOUSE_1F,  4, 4  ; $25
+map_const REDS_HOUSE_2F,  4, 4  ; $26
+map_const BLUES_HOUSE,    4, 4  ; $27
+map_const OAKS_LAB,       5, 6  ; $28
+end_indoor_group PALLET_TOWN
+
+map_const VIRIDIAN_POKECENTER,    7, 4  ; $29
+map_const VIRIDIAN_MART,          4, 4  ; $2A
+map_const VIRIDIAN_SCHOOL_HOUSE,  4, 4  ; $2B
+map_const VIRIDIAN_NICKNAME_HOUSE,4, 4  ; $2C
+map_const VIRIDIAN_GYM,          10, 9  ; $2D
+end_indoor_group VIRIDIAN_CITY
+```
+
+<Tip>
+Grouping tracks which maps belong to each location, useful for the Town Map and for organizing the 248 total maps in the game.
+</Tip>
+
+## Map Data Files
+
+Each map has associated data files:
+
+### Block Data (.blk)
+
+Tile layout stored in `maps/*.blk` as binary block data:
+
+```bash
+PalletTown.blk
+ViridianCity.blk
+Route1.blk
+```
+
+Each byte represents a block ID (4×4 tiles), making maps memory-efficient.
+
+<Accordion title="Block vs Tile System">
+Maps use a two-level tile system:
+
+1. **Blocks**: 4×4 tile groups with a single ID
+2. **Tiles**: Individual 8×8 pixel graphics
+
+This reduces map data size by ~16× compared to storing individual tiles.
+</Accordion>
+
+### Map Headers
+
+Map headers in `data/maps/map_header_pointers.asm` point to:
+
+- Tileset ID
+- Map dimensions
+- Block data pointer
+- Text pointers
+- Script pointers
+- Connection data
+
+### Map Connections
+
+Large outdoor maps can connect to adjacent maps:
+
+```asm
+; Example connection structure:
+; - Direction (North, South, East, West)
+; - Connected map ID
+; - Strip pointer (which part of the map connects)
+; - Strip length
+```
+
+<Info>
+When the player walks to the edge of a connected map, the game seamlessly loads the adjacent map without a transition screen.
+</Info>
+
+## Map Headers Structure
+
+Each map header contains:
+
+<CodeGroup>
+```asm Header Components
+; Tileset ID (determines available blocks)
+db TILESET_ID
+
+; Map dimensions
+db HEIGHT, WIDTH
+
+; Pointers
+dw BlockData
+dw TextPointers
+dw ScriptPointers
+
+; Connections (if any)
+db CONNECTION_FLAGS
+; ... connection data ...
+```
+</CodeGroup>
+
+## Tilesets
+
+Tilesets define which blocks are available on a map. From `constants/tileset_constants.asm`:
+
+```asm
+const_def
+const TILESET_OVERWORLD    ; $00 - Outdoor areas
+const TILESET_REDS_HOUSE   ; $01 - Interior
+const TILESET_MART         ; $02 - Poké Marts
+const TILESET_FOREST       ; $03 - Viridian Forest
+const TILESET_GYM          ; $04 - Gym interiors
+const TILESET_POKECENTER   ; $05 - Pokémon Centers
+; ... more tilesets ...
+```
+
+Each tileset includes:
+- Block definitions (which tiles make up each block)
+- Collision data (which blocks are walkable)
+- Graphic tile pointers
+- Animated tile data
+
+<Warning>
+Maps using the same tileset share the same block palette. This is why all Pokémon Centers look similar—they use the same tileset.
+</Warning>
+
+## Sprite Sets
+
+Maps reference sprite sets that determine which overworld sprites can appear:
+
+```asm
+MapSpriteSets:
+    db SPRITE_SET_PALLET_TOWN
+    db SPRITE_SET_VIRIDIAN_CITY
+    db SPRITE_SET_PEWTER_CITY
+    ; ...
+```
+
+Each sprite set defines which NPC sprites (characters, Pokémon, items) are loaded into VRAM for that map.
+
+## Map Scripts
+
+Maps can have scripts that execute when:
+- Player enters the map
+- Player presses A on an object
+- Player walks on specific tiles (script tiles)
+- Special events trigger
+
+Scripts are written in a custom scripting language and stored per-map.
+
+## Map Objects
+
+Each map can contain:
+
+<Accordion title="NPCs">
+Trainers, Gym Leaders, shopkeepers, and other characters with dialogue and behavior.
+</Accordion>
+
+<Accordion title="Items">
+Visible Poké Balls containing items, retrievable once per save file.
+</Accordion>
+
+<Accordion title="Hidden Items">
+Invisible items found with the Itemfinder, tracked via bit flags.
+</Accordion>
+
+<Accordion title="Warps">
+Tile-based teleporters that move the player to different maps.
+</Accordion>
+
+<Accordion title="Signs">
+Readable signs with text messages.
+</Accordion>
+
+## Warp System
+
+Warps connect maps together:
+
+```asm
+; Warp data format:
+db WARP_TO_MAP_ID
+db WARP_TO_X
+db WARP_TO_Y
+```
+
+When the player steps on a warp tile:
+1. Fade out current map
+2. Load destination map
+3. Place player at warp destination coordinates
+4. Fade in new map
+
+<Tip>
+Warps are bidirectional—entering a building and exiting use the same warp system with different destinations.
+</Tip>
+
+## Wild Encounter Data
+
+Maps with wild Pokémon reference encounter tables from `data/wild/`:
+
+```asm
+; Wild data format:
+db ENCOUNTER_RATE  ; 0-255, chance per step
+db 10 Pokémon species and levels
+```
+
+Each map can have separate encounter tables for:
+- Grass encounters
+- Water encounters (Surf)
+- Fishing encounters (Old/Good/Super Rod)
+
+## Map Music
+
+Each map has an associated music track stored in `data/maps/songs.asm`:
+
+```asm
+MapSongBanks:
+    db MUSIC_PALLET_TOWN
+    db MUSIC_CITIES1      ; Viridian City
+    db MUSIC_CITIES1      ; Pewter City
+    db MUSIC_CITIES2      ; Cerulean City
+```
+
+Music changes automatically when entering a new map.
+
+## Special Maps
+
+### Route 23
+
+The longest route in the game (10×72 tiles), with badge requirement gates.
+
+### Seafoam Islands
+
+Multi-level dungeon with puzzle elements requiring Strength to manipulate boulders.
+
+### Safari Zone
+
+Multiple connected maps with a step counter and special battle mechanics.
+
+### Unused Map
+
+```asm
+map_const UNUSED_MAP_0B,  0, 0  ; $0B
+```
+
+An unused map ID exists in the constants, likely a leftover from development.
+
+<CardGroup cols={2}>
+  <Card title="Overworld" icon="map-location-dot" href="/game-systems/overworld">
+    Player movement and collision
+  </Card>
+  <Card title="Audio" icon="music" href="/game-systems/audio">
+    Map music assignments
+  </Card>
+  <Card title="Reference" icon="book" href="/reference/constants">
+    Map constants and data
+  </Card>
+  <Card title="Architecture" icon="sitemap" href="/architecture/rom-structure">
+    Map data organization
+  </Card>
+</CardGroup>
+
+## Key Files
+
+- `constants/map_constants.asm` - Map IDs and dimensions
+- `constants/tileset_constants.asm` - Tileset definitions
+- `maps/*.blk` - Binary map block data
+- `data/maps/map_header_pointers.asm` - Map header pointers
+- `data/maps/map_header_banks.asm` - ROM bank organization
+- `data/maps/sprite_sets.asm` - Sprite set assignments
+- `data/maps/songs.asm` - Music track assignments
+- `maps.asm` - Main map assembly file

@@ -1,97 +1,81 @@
 ---
-title: "Introduction"
-description: "Welcome to the new home for your documentation"
+title: "Pokémon Red/Blue Disassembly"
+description: "Complete disassembly of Pokémon Red and Blue Game Boy games in Z80 assembly"
 ---
 
-## Setting up
+<div className="relative overflow-hidden rounded-lg bg-gradient-to-br from-[#1E1F4D] to-[#2c2f6a] p-12 mb-8 border border-transparent shadow-[0_8px_24px_rgba(0,0,0,0.4)]">
+  <div className="relative z-10">
+    <h1 className="text-5xl font-bold text-white mb-4">Pokémon Red/Blue Disassembly</h1>
+    <p className="text-xl text-white/90 mb-8 max-w-2xl">
+      A complete, byte-perfect disassembly of Pokémon Red and Blue in Game Boy Z80 assembly. Build authentic ROMs, explore game internals, and create mods.
+    </p>
+    <div className="flex gap-4">
+      <a href="/quickstart" className="inline-flex items-center px-6 py-3 rounded-md bg-[#5865f2] text-white font-semibold hover:bg-[#4752c4] transition">
+        Get Started
+      </a>
+      <a href="https://github.com/pret/pokered" className="inline-flex items-center px-6 py-3 rounded-md bg-white text-black font-semibold hover:bg-gray-100 transition">
+        View on GitHub
+      </a>
+    </div>
+  </div>
+</div>
 
-Get your documentation site up and running in minutes.
+## Key Features
 
-<Card
-  title="Start here"
-  icon="rocket"
-  href="/quickstart"
-  horizontal
->
-  Follow our three step quickstart guide.
+<CardGroup cols={2}>
+  <Card title="Byte-Perfect ROMs" icon="check-circle" iconType="solid">
+    Builds ROMs that exactly match the original Pokémon Red and Blue checksums, verified with SHA-1 hashes
+  </Card>
+  <Card title="Complete Game Systems" icon="gamepad" iconType="solid">
+    Fully documented battle engine, overworld mechanics, Pokémon data, items, trainers, maps, and audio
+  </Card>
+  <Card title="Game Boy Architecture" icon="microchip" iconType="solid">
+    Learn how classic Game Boy games work with detailed documentation of hardware, memory, and banking
+  </Card>
+  <Card title="Custom Build Tools" icon="wrench" iconType="solid">
+    Graphics compression, ROM patching, and specialized tools for working with Game Boy assembly
+  </Card>
+</CardGroup>
+
+## Quick Start
+
+<Steps>
+  <Step title="Install Dependencies">
+    Install RGBDS 1.0.1, Make, GCC, and Git on your platform
+  </Step>
+  <Step title="Clone and Build">
+    Clone the repository and run `make` to build pokered.gbc and pokeblue.gbc
+  </Step>
+  <Step title="Verify ROMs">
+    Run `make compare` to verify your builds match the original game checksums
+  </Step>
+</Steps>
+
+<Card title="Ready to build?" icon="rocket" href="/installation" horizontal>
+  Follow the complete installation guide for your platform
 </Card>
 
-## Make it yours
+## Explore the Disassembly
 
-Design a docs site that looks great and empowers your users.
+<CardGroup cols={3}>
+  <Card title="Architecture" icon="sitemap" href="/architecture/overview">
+    Learn about Game Boy hardware and ROM structure
+  </Card>
+  <Card title="Game Systems" icon="puzzle-piece" href="/game-systems/battle-engine">
+    Dive into battle mechanics and game features
+  </Card>
+  <Card title="Code Reference" icon="code" href="/reference/constants">
+    Browse constants, macros, and data structures
+  </Card>
+</CardGroup>
 
-<Columns cols={2}>
-  <Card
-    title="Edit locally"
-    icon="pen-to-square"
-    href="/development"
-  >
-    Edit your docs locally and preview them in real time.
-  </Card>
-  <Card
-    title="Customize your site"
-    icon="palette"
-    href="/essentials/settings"
-  >
-    Customize the design and colors of your site to match your brand.
-  </Card>
-    <Card
-    title="Set up navigation"
-    icon="map"
-    href="/essentials/navigation"
-  >
-    Organize your docs to help users find what they need and succeed with your product.
-  </Card>
-  <Card
-    title="API documentation"
-    icon="terminal"
-    href="/api-reference/introduction"
-  >
-    Auto-generate API documentation from OpenAPI specifications.
-  </Card>
-</Columns>
+## Community
 
-## Create beautiful pages
-
-Everything you need to create world-class documentation.
-
-<Columns cols={2}>
-  <Card
-    title="Write with MDX"
-    icon="pen-fancy"
-    href="/essentials/markdown"
-  >
-    Use MDX to style your docs pages.
+<CardGroup cols={2}>
+  <Card title="Discord Community" icon="discord" href="https://discord.gg/d5dubZ3">
+    Join the pret Discord server (#pokered channel) to ask questions and share discoveries
   </Card>
-  <Card
-    title="Code samples"
-    icon="code"
-    href="/essentials/code"
-  >
-    Add sample code to demonstrate how to use your product.
+  <Card title="GitHub Repository" icon="github" href="https://github.com/pret/pokered">
+    Explore the source code, report issues, and contribute improvements
   </Card>
-  <Card
-    title="Images"
-    icon="image"
-    href="/essentials/images"
-  >
-    Display images and other media.
-  </Card>
-  <Card
-    title="Reusable snippets"
-    icon="recycle"
-    href="/essentials/reusable-snippets"
-  >
-    Write once and reuse across your docs.
-  </Card>
-</Columns>
-
-## Need inspiration?
-
-<Card
-  title="See complete examples"
-  icon="stars"
-  href="https://mintlify.com/customers"
->
-  Browse our showcase of exceptional documentation sites.
-</Card>
+</CardGroup>

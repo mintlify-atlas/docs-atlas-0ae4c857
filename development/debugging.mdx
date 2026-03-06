@@ -1,0 +1,452 @@
+---
+title: Debugging
+description: Tools and techniques for debugging Pokémon Red/Blue
+---
+
+## Overview
+
+The Pokémon Red/Blue disassembly provides several debugging features and outputs symbol files that enable powerful debugging workflows with Game Boy emulators. This guide covers building debug versions, understanding debug outputs, and using debugging tools effectively.
+
+## Debug Build
+
+The project includes a special debug build of Pokémon Blue with additional features:
+
+```bash
+make blue_debug
+```
+
+This creates `pokeblue_debug.gbc` with:
+
+- **Debug menu** - Accessible at startup
+- **Debug party** - Pre-configured Pokémon with special moves
+- **Test battle mode** - Rapid battle testing
+- **All symbols exported** - For use with emulator debuggers
+- **0xFF padding** - Makes unused ROM regions visible
+
+<Note>
+The debug build uses 0xFF as the ROM padding byte (instead of 0x00), which helps identify unused space and makes buffer overruns more visible.
+</Note>
+
+## Debug Menu
+
+When you run `pokeblue_debug.gbc`, you'll see a debug menu instead of the normal title screen:
+
+<Steps>
+  <Step title="Debug Menu Options">
+    The menu presents two options:
+    
+    - **FIGHT** - Starts a test battle
+    - **DEBUG** - Starts a new game with debug features enabled
+  </Step>
+
+  <Step title="Test Battle Mode">
+    Selecting FIGHT:
+    - Sets player name to "Tom"
+    - Sets rival name to "Juerry"
+    - Gives you Earth Badge for obedience
+    - Starts with a level 20 Rhydon
+    - Battles against a level 20 Rhydon
+    - Loops indefinitely for testing
+    
+    **Source:** `engine/debug/debug_menu.asm:75-121`
+  </Step>
+
+  <Step title="Debug Mode New Game">
+    Selecting DEBUG:
+    - Enables debug mode flag (`BIT_DEBUG_MODE` in `wStatusFlags6`)
+    - Uses debug names from Oak's speech
+    - Starts a new game with debug party and items
+    
+    **Source:** `engine/debug/debug_menu.asm:58-60`
+  </Step>
+</Steps>
+
+## Debug Party
+
+When starting a debug new game, you receive a pre-configured party:
+
+<CardGroup cols={2}>
+  <Card title="Exeggutor - Level 90" icon="tree">
+    **Moves:** Fly, Cut, Surf, Strength
+    
+    All four HM moves for easy navigation. Exeggutor was Tsunekazu Ishihara's favorite debugging Pokémon.
+  </Card>
+
+  <Card title="Mew - Level 5" icon="sparkles">
+    **Purpose:** Testing and experimentation
+    
+    The rarest Pokémon available from the start.
+  </Card>
+
+  <Card title="Jolteon - Level 56" icon="bolt">
+    **Moves:** Thunderbolt (added)
+    
+    Powerful Electric-type for testing.
+  </Card>
+
+  <Card title="Dugtrio - Level 56" icon="mountain">
+    **Purpose:** Ground-type coverage
+  </Card>
+
+  <Card title="Articuno - Level 57" icon="snowflake">
+    **Moves:** Fly (added)
+    
+    Legendary bird with HM for flying.
+  </Card>
+
+  <Card title="Pikachu - Level 5" icon="bolt">
+    **Moves:** Surf (added)
+    
+    For testing Surfing Pikachu.
+  </Card>
+</CardGroup>
+
+**Source:** `engine/debug/debug_party.asm:15-32`
+
+## Debug Items and Features
+
+The debug new game also provides:
+
+### Starting Items
+
+- **Bicycle** × 1 - Fast travel
+- **Full Restore** × 99 - Healing
+- **Full Heal** × 99 - Status cure
+- **Escape Rope** × 99 - Dungeon escape
+- **Rare Candy** × 99 - Level up testing
+- **Master Ball** × 99 - Easy captures
+- **Town Map** × 1 - Navigation
+- **Secret Key** × 1 - Cinnabar Gym access
+- **Card Key** × 1 - Silph Co. access
+- **S.S. Ticket** × 1 - S.S. Anne access
+- **Lift Key** × 1 - Team Rocket HQ access
+
+**Source:** `engine/debug/debug_party.asm:138-150`
+
+### Starting Flags
+
+- **All badges except Earth Badge** - Enables HMs and stat boosts
+- **Complete Pokédex** - All 151 Pokémon seen and owned
+- **All towns visited** - Can Fly anywhere
+- **Obtained Pokédex** - Can use Pokédex from start
+- **Rival chose Squirtle, Player chose Charmander**
+
+**Source:** `engine/debug/debug_party.asm:39-124`
+
+## Building with Debug Symbols
+
+To generate `.sym` and `.map` files for any build:
+
+```bash
+make DEBUG=1
+```
+
+This adds the `-E` flag to rgbasm, which exports all symbols to the output files.
+
+<CodeGroup>
+```bash Build Red with Symbols
+make DEBUG=1 red
+```
+
+```bash Build All with Symbols
+make DEBUG=1
+```
+
+```bash Build and Compare
+make DEBUG=1 compare
+```
+</CodeGroup>
+
+<Info>
+The official CI builds always use `DEBUG=1` to generate symbols for the [symbols branch](https://github.com/pret/pokered/tree/symbols).
+</Info>
+
+## Symbol Files (.sym)
+
+Symbol files map addresses to labels, making debugging much easier.
+
+### Format
+
+Each line contains a bank:address pair and a label name:
+
+```
+00:0150 Home
+00:0C16 Joypad
+01:4000 PrintText
+0E:52A3 BattleCore
+```
+
+### Using with Emulators
+
+Most Game Boy emulators can load symbol files:
+
+<AccordionGroup>
+  <Accordion title="BGB (Windows)">
+    **Loading symbols:**
+    1. Open the debugger (Right-click → Debugger)
+    2. Right-click in the disassembly → Load SYM file
+    3. Select `pokered.sym` or `pokeblue.sym`
+    
+    **Features:**
+    - Disassembly shows label names
+    - Set breakpoints by symbol name
+    - Watch expressions using symbols
+    - Call stack with function names
+  </Accordion>
+
+  <Accordion title="Emulicious (Cross-platform)">
+    **Loading symbols:**
+    1. Tools → Debugger
+    2. File → Load Symbol File
+    3. Select the `.sym` file
+    
+    **Features:**
+    - Source-level debugging
+    - Conditional breakpoints
+    - Memory viewer with labels
+    - Profiling support
+  </Accordion>
+
+  <Accordion title="mGBA (Cross-platform)">
+    **Loading symbols:**
+    1. Tools → Game Pak sensors
+    2. Tools → Scripting (for advanced use)
+    3. Load `.sym` file via debug console
+    
+    **Note:** mGBA has limited debugging features but supports symbols in logging.
+  </Accordion>
+
+  <Accordion title="SameBoy (Cross-platform)">
+    **Loading symbols:**
+    Automatically loads `.sym` files with the same name as the ROM.
+    
+    **Features:**
+    - Integrated debugger console
+    - Breakpoints by symbol
+    - Memory watching
+    - Step debugging
+  </Accordion>
+</AccordionGroup>
+
+## Map Files (.map)
+
+Map files show how sections are laid out in the ROM.
+
+### Format
+
+```
+SECTION: $0000-$0150 ($0151 bytes) ["NULL"]
+  BANK: 0
+  ALIGN: 0
+  EMPTY
+
+SECTION: $0150-$3FFF ($3EB0 bytes) ["Home"]
+  BANK: 0
+  ALIGN: 0
+  home.o:(.text)
+```
+
+### Information Provided
+
+- Section names and addresses
+- Section sizes (in bytes)
+- Which object files contributed code
+- Bank assignments
+- Memory alignment
+
+<Tip>
+Use map files to understand ROM layout, find where specific code lives, and optimize size.
+</Tip>
+
+## Common Debugging Techniques
+
+### Breakpoints
+
+Set breakpoints at key functions:
+
+<CodeGroup>
+```text Battle Start
+break BattleCore
+```
+
+```text Wild Encounter
+break WildEncounter
+```
+
+```text Text Display
+break DisplayTextID
+```
+
+```text Menu Handler
+break HandleMenuInput
+```
+</CodeGroup>
+
+### Memory Watching
+
+Monitor important RAM addresses:
+
+<CardGroup cols={2}>
+  <Card title="Party Data" icon="dragon">
+    `wPartyCount` - Number of Pokémon (D163)
+    
+    `wPartyMon1Species` - First Pokémon species (D164)
+  </Card>
+
+  <Card title="Battle Data" icon="sword">
+    `wBattleType` - Current battle type (D05A)
+    
+    `wCurOpponent` - Enemy trainer/Pokémon (D059)
+  </Card>
+
+  <Card title="Map Data" icon="map">
+    `wCurMap` - Current map ID (D35E)
+    
+    `wXCoord` / `wYCoord` - Player position (D361/D362)
+  </Card>
+
+  <Card title="Flags" icon="flag">
+    `wObtainedBadges` - Badge flags (D356)
+    
+    `wEventFlags` - Event completion flags (D747)
+  </Card>
+</CardGroup>
+
+### Tracing Execution
+
+Log function calls to understand control flow:
+
+1. Enable execution logging in your emulator
+2. Set breakpoints at function entry points
+3. Single-step through complex routines
+4. Watch stack pointer to track call depth
+
+### Frame-by-Frame Analysis
+
+For graphics or timing issues:
+
+1. Advance frame-by-frame (usually F1 key)
+2. Watch VRAM during VBlank
+3. Monitor PPU state
+4. Check sprite OAM updates
+
+## Advanced Debugging
+
+### Conditional Breakpoints
+
+Break only when specific conditions are met:
+
+```
+break BattleCore if wCurOpponent == 163  ; Break only for Mew battles
+break AddPartyMon if wCurPartySpecies == 0  ; Break on invalid species
+```
+
+### Logging to Console
+
+Some emulators support logging:
+
+```asm
+; Add debug output in assembly
+IF DEF(_DEBUG)
+    ld a, [wBattleType]
+    ; Log value (emulator-specific)
+ENDC
+```
+
+### Save State Debugging
+
+1. Save state at interesting points
+2. Load and modify RAM values
+3. Test different scenarios
+4. Compare states to find bugs
+
+### Regression Testing
+
+After making changes:
+
+```bash
+# Build and verify ROM matches original
+make compare
+
+# Test with save states from original ROM
+# Compare behavior in both versions
+```
+
+## Debugging Symbols Reference
+
+Key symbols for debugging:
+
+### Engine Functions
+
+- `Joypad` - Input handling
+- `VBlank` - VBlank interrupt handler
+- `Serial` - Link cable communication
+- `DelayFrames` - Timing delays
+- `FarCopyData2` - Data copying
+- `CallFunctionInTable` - Jump table dispatcher
+
+### Battle System
+
+- `BattleCore` - Main battle loop
+- `InitBattle` - Battle initialization
+- `DoBattleMenu` - Battle menu handler
+- `ExecutePlayerMove` - Player attack execution
+- `EnemySelection` - AI move selection
+
+### Menu System
+
+- `HandleMenuInput` - Generic menu handler
+- `PlaceMenuCursor` - Cursor positioning
+- `DisplayTextID` - Text display
+- `PrintText` - Text rendering
+
+### Map Engine
+
+- `OverworldLoop` - Main overworld loop
+- `CheckWarpsNoCollision` - Warp detection
+- `HandleMidJump` - Jump and ledge handling
+- `UpdateSprites` - NPC sprite updates
+
+<Info>
+For a complete symbol reference, see the [symbols branch](https://github.com/pret/pokered/tree/symbols) which contains `.sym` files for all builds.
+</Info>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Symbols not loading in emulator">
+    **Problem:** Emulator doesn't recognize the `.sym` file.
+    
+    **Solution:** 
+    - Ensure the ROM and `.sym` file have the same base name
+    - Check emulator documentation for symbol file format
+    - Try rebuilding with `make DEBUG=1`
+  </Accordion>
+
+  <Accordion title="Debug build crashes or behaves oddly">
+    **Problem:** Debug features cause unexpected behavior.
+    
+    **Solution:**
+    - The debug build has intentional differences (debug party, menu, etc.)
+    - Use a regular build if you want vanilla behavior
+    - The test battle mode loops infinitely by design
+  </Accordion>
+
+  <Accordion title="Breakpoint not triggering">
+    **Problem:** Set a breakpoint but it never hits.
+    
+    **Solution:**
+    - Verify the symbol exists in the `.sym` file
+    - Check you're using the correct bank (ROM bank switching)
+    - Ensure the code path actually executes
+  </Accordion>
+
+  <Accordion title="Wrong values in memory">
+    **Problem:** RAM addresses show unexpected values.
+    
+    **Solution:**
+    - RAM addresses in symbols are relative to WRAM start
+    - Add 0xC000 to symbol addresses for actual RAM location
+    - Some values are computed dynamically
+  </Accordion>
+</AccordionGroup>

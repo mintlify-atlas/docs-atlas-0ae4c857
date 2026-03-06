@@ -1,0 +1,382 @@
+---
+title: Building Pokémon Red/Blue
+description: Complete guide to building the ROMs from source code
+---
+
+## Overview
+
+The Pokémon Red/Blue disassembly uses the RGBDS (Rednex Game Boy Development System) toolchain to assemble the source code into Game Boy ROM files. The build process is controlled by a comprehensive Makefile that handles assembly, linking, graphics processing, and ROM validation.
+
+## Prerequisites
+
+Before building, you need to install:
+
+- **make** - Build automation tool
+- **gcc** or **clang** - C compiler for building tools
+- **git** - Version control (for cloning the repository)
+- **RGBDS 1.0.1** - Game Boy development toolchain
+  - `rgbasm` - Assembler
+  - `rgblink` - Linker
+  - `rgbfix` - ROM header fixer
+  - `rgbgfx` - Graphics converter
+
+<Note>
+The project requires **RGBDS version 1.0.1** specifically. Older versions will not work, and newer versions may have compatibility issues.
+</Note>
+
+For detailed installation instructions for your platform, see [INSTALL.md](https://github.com/pret/pokered/blob/master/INSTALL.md).
+
+## Build Targets
+
+The Makefile provides several build targets for different purposes:
+
+### Main ROM Targets
+
+<Steps>
+  <Step title="Build All ROMs">
+    Build both Pokémon Red and Blue:
+    ```bash
+    make
+    # or explicitly:
+    make all
+    ```
+    
+    This creates:
+    - `pokered.gbc` - Pokémon Red ROM
+    - `pokeblue.gbc` - Pokémon Blue ROM
+    - `pokeblue_debug.gbc` - Debug build of Blue
+  </Step>
+
+  <Step title="Build Individual ROMs">
+    Build specific versions:
+    
+    <CodeGroup>
+    ```bash Red Version
+    make red
+    ```
+    
+    ```bash Blue Version
+    make blue
+    ```
+    
+    ```bash Debug Build
+    make blue_debug
+    ```
+    </CodeGroup>
+  </Step>
+
+  <Step title="Build Virtual Console Patches">
+    For 3DS Virtual Console releases:
+    
+    ```bash
+    make red_vc      # Creates pokered.patch
+    make blue_vc     # Creates pokeblue.patch
+    ```
+  </Step>
+</Steps>
+
+### Utility Targets
+
+<CardGroup cols={2}>
+  <Card title="tools" icon="wrench">
+    ```bash
+    make tools
+    ```
+    Builds all custom tools (gfx, pkmncompress, scan_includes, make_patch)
+  </Card>
+
+  <Card title="compare" icon="code-compare">
+    ```bash
+    make compare
+    ```
+    Builds ROMs and verifies they match the original releases via SHA-1 checksums
+  </Card>
+
+  <Card title="clean" icon="broom">
+    ```bash
+    make clean
+    ```
+    Removes all generated files including graphics and ROMs
+  </Card>
+
+  <Card title="tidy" icon="trash">
+    ```bash
+    make tidy
+    ```
+    Removes only ROMs and object files, keeps processed graphics
+  </Card>
+</CardGroup>
+
+## Build Process
+
+### Step-by-Step Assembly
+
+The build system follows this workflow:
+
+<Steps>
+  <Step title="Tool Compilation">
+    Custom C tools are compiled first:
+    - **gfx** - Processes graphics files
+    - **pkmncompress** - Compresses Pokémon sprites
+    - **scan_includes** - Scans assembly dependencies
+    - **make_patch** - Generates Virtual Console patches
+  </Step>
+
+  <Step title="Dependency Scanning">
+    The `scan_includes` tool recursively scans all `.asm` files to build a dependency tree. This ensures files are reassembled when any included file changes.
+  </Step>
+
+  <Step title="Graphics Processing">
+    PNG images are converted to Game Boy tile formats:
+    - `.png` → `.2bpp` (2 bits per pixel)
+    - `.png` → `.1bpp` (1 bit per pixel)
+    - `.2bpp` → `.pic` (compressed sprites)
+    
+    Special processing flags are applied per-file (see Makefile lines 167-187).
+  </Step>
+
+  <Step title="Assembly">
+    Source files are assembled with `rgbasm`:
+    ```bash
+    rgbasm -Q8 -P includes.asm -D _RED -o audio_red.o audio.asm
+    ```
+    
+    **Flags explained:**
+    - `-Q8` - Set number precision to 8 bits
+    - `-P includes.asm` - Pre-include common definitions
+    - `-D _RED` - Define version constant (RED/BLUE/DEBUG)
+    - `-Weverything -Wtruncation=1` - Enable all warnings
+  </Step>
+
+  <Step title="Linking">
+    Object files are linked into a ROM:
+    ```bash
+    rgblink -d -p 0x00 -l layout.link -m pokered.map -n pokered.sym -o pokered.gbc *.o
+    ```
+    
+    **Flags explained:**
+    - `-d` - Create map and symbol files
+    - `-p 0x00` - Set padding byte (0xFF for debug)
+    - `-l layout.link` - Use memory layout file
+    - `-m` - Output map file
+    - `-n` - Output symbol file
+  </Step>
+
+  <Step title="ROM Fixing">
+    The ROM header is fixed with proper checksums:
+    ```bash
+    rgbfix -jsv -n 0 -k 01 -l 0x33 -m MBC3+RAM+BATTERY -r 03 -p 0x00 -t "POKEMON RED" pokered.gbc
+    ```
+    
+    This sets:
+    - Japanese region, SGB enhancements, save validation
+    - Game Boy Color compatibility
+    - Cartridge type (MBC3 with battery-backed RAM)
+    - Title and proper checksums
+  </Step>
+</Steps>
+
+### Object Files and Sections
+
+The ROM is built from these main object files:
+
+- `audio.o` - Sound effects and music
+- `home.o` - Core engine code in ROM0
+- `main.o` - Main game logic
+- `maps.o` - Map data and scripts
+- `ram.o` - RAM definitions
+- `text.o` - Dialogue and text
+- `gfx/pics.o` - Pokémon sprites
+- `gfx/sprites.o` - Trainer and NPC sprites
+- `gfx/tilesets.o` - Map tilesets
+
+Each version (Red, Blue, Debug, VC) has its own set of object files with version-specific symbols.
+
+## Build Configuration
+
+### Version Defines
+
+The Makefile defines constants to control version-specific code:
+
+- **`_RED`** - Pokémon Red features
+- **`_BLUE`** - Pokémon Blue features
+- **`_DEBUG`** - Debug menu and party
+- **`_RED_VC`** - Virtual Console Red modifications
+- **`_BLUE_VC`** - Virtual Console Blue modifications
+
+### Using a Local RGBDS
+
+If you have different projects requiring different RGBDS versions, you can use a local installation:
+
+```bash
+make RGBDS=path/to/rgbds-1.0.1/
+```
+
+The Makefile uses the `RGBDS` variable as a prefix for all tool commands:
+
+```makefile
+RGBDS ?=
+RGBASM  ?= $(RGBDS)rgbasm
+RGBFIX  ?= $(RGBDS)rgbfix
+RGBGFX  ?= $(RGBDS)rgbgfx
+RGBLINK ?= $(RGBDS)rgblink
+```
+
+### Debug Symbols
+
+To generate symbol and map files for debugging:
+
+```bash
+make DEBUG=1
+```
+
+This adds the `-E` flag to rgbasm, which exports all symbols to the `.sym` file.
+
+<Info>
+The CI system always builds with `DEBUG=1` to generate symbols for the symbols branch.
+</Info>
+
+## Graphics Processing
+
+The build system automatically processes graphics with special rules:
+
+### Standard Conversion
+
+PNG images are converted to Game Boy tile format:
+
+```makefile
+%.2bpp: %.png
+    rgbgfx --colors dmg -o $@ $<
+```
+
+### Special Processing
+
+Many graphics have custom processing flags:
+
+<Accordion title="Battle Animations">
+  ```makefile
+  gfx/battle/move_anim_0.2bpp: tools/gfx += --trim-whitespace
+  gfx/battle/move_anim_1.2bpp: tools/gfx += --trim-whitespace
+  ```
+  Removes trailing empty tiles to save space.
+</Accordion>
+
+<Accordion title="Intro Sprites">
+  ```makefile
+  gfx/intro/red_nidorino_1.2bpp: RGBGFXFLAGS += --columns
+  gfx/intro/gengar.2bpp: tools/gfx += --remove-duplicates --preserve=0x19,0x76
+  ```
+  Column-major ordering and duplicate tile removal with preserved tiles.
+</Accordion>
+
+<Accordion title="Tilesets">
+  ```makefile
+  gfx/tilesets/%.2bpp: tools/gfx += --trim-whitespace
+  gfx/tilesets/reds_house.2bpp: tools/gfx += --preserve=0x48
+  ```
+  Trim whitespace but preserve specific tiles.
+</Accordion>
+
+<Accordion title="Pokémon Sprites">
+  ```makefile
+  %.pic: %.2bpp
+      tools/pkmncompress $< $@
+  ```
+  Pokémon sprites are compressed using a custom algorithm.
+</Accordion>
+
+## Troubleshooting
+
+### Common Build Errors
+
+<AccordionGroup>
+  <Accordion title="'rgbasm' not found">
+    **Problem:** RGBDS is not installed or not in PATH.
+    
+    **Solution:** Install RGBDS 1.0.1 following the [installation guide](https://rgbds.gbdev.io/install), or use `make RGBDS=/path/to/rgbds/`.
+  </Accordion>
+
+  <Accordion title="Version mismatch errors">
+    **Problem:** Using wrong RGBDS version.
+    
+    **Solution:** The project requires RGBDS 1.0.1 exactly. Check version with `rgbasm -V`.
+  </Accordion>
+
+  <Accordion title="'No rule to make target'">
+    **Problem:** Missing source files or graphics.
+    
+    **Solution:** Ensure you've cloned the complete repository. Re-run `git clone` if necessary.
+  </Accordion>
+
+  <Accordion title="SHA-1 mismatch on 'make compare'">
+    **Problem:** Built ROM doesn't match original.
+    
+    **Solution:** This is expected if you've made changes. To verify your build environment works, try on a clean clone first.
+  </Accordion>
+
+  <Accordion title="Graphics processing fails">
+    **Problem:** PNG files can't be processed.
+    
+    **Solution:** Ensure RGBDS was built with libpng support. Reinstall RGBDS with `pkg-config` and `libpng-dev` installed.
+  </Accordion>
+</AccordionGroup>
+
+### Parallel Builds
+
+Speed up compilation with parallel jobs:
+
+```bash
+make -j$(nproc)        # Linux
+make -j$(sysctl -n hw.ncpu)  # macOS
+```
+
+<Warning>
+Very high job counts (-j16 or more) may cause issues with dependency tracking. Use -j4 to -j8 for best results.
+</Warning>
+
+## Verifying Your Build
+
+To verify that your build matches the original releases:
+
+```bash
+make compare
+```
+
+This builds the ROMs and checks their SHA-1 hashes against `roms.sha1`:
+
+- `pokered.gbc` → `ea9bcae617fdf159b045185467ae58b2e4a48b9a`
+- `pokeblue.gbc` → `d7037c83e1ae5b39bde3c30787637ba1d4c48ce2`
+- `pokeblue_debug.gbc` → `5b1456177671b79b263c614ea0e7cc9ac542e9c4`
+
+<Tip>
+The debug build (`pokeblue_debug.gbc`) has a different hash because it includes debug features and uses 0xFF padding instead of 0x00.
+</Tip>
+
+## Memory Layout
+
+The `layout.link` file defines how code and data are organized in the ROM:
+
+- **ROM0** - Fixed bank ($0000-$3FFF)
+  - Interrupt vectors, core engine, header
+- **ROMX** - Switchable banks ($4000-$7FFF)
+  - Banks 1-$2C contain game logic, data, and assets
+- **WRAM0** - Working RAM ($C000-$CFFF)
+- **VRAM** - Video RAM ($8000-$9FFF)
+- **SRAM** - Save data (external cartridge RAM)
+- **HRAM** - High RAM ($FF80-$FFFE)
+
+The linker organizes object files into these sections according to the layout file.
+
+## Build Output
+
+A successful build produces:
+
+- **ROM files** - `.gbc` executables
+- **Symbol files** - `.sym` containing label addresses
+- **Map files** - `.map` showing section layout
+- **Patch files** - `.patch` for Virtual Console (if built)
+- **Graphics** - `.1bpp`, `.2bpp`, `.pic` processed tiles
+
+<Info>
+The symbols branch of the repository contains `.sym` and `.map` files from the official build for reference.
+</Info>

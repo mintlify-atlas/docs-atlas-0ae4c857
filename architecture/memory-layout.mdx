@@ -1,0 +1,445 @@
+---
+title: 'Memory Layout'
+description: 'Complete memory map and RAM organization for Pokémon Red/Blue'
+---
+
+## Overview
+
+Pokémon Red and Blue use various memory regions for different purposes. Understanding this layout is crucial for comprehending how the game manages its state.
+
+## Complete Memory Map
+
+```
+$0000-$00FF: RST vectors and interrupt handlers
+$0100-$014F: ROM header
+$0150-$3FFF: Home bank (Bank 0)
+$4000-$7FFF: Switchable ROM banks (1-44)
+$8000-$97FF: Tile data (blocks 0-2)
+$9800-$9BFF: Background tile map 0
+$9C00-$9FFF: Background tile map 1
+$A000-$BFFF: External cartridge RAM
+$C000-$C0FF: Audio RAM
+$C100-$C1FF: Sprite state data
+$C200-$C2A0: Shadow OAM
+$C2A0-$C3FF: Tilemap and overworld data
+$C400-$CFFF: Main work RAM
+$D000-$DFFF: Party, bag, and game state
+$E000-$FDFF: Echo of $C000-$DDFF (unusable)
+$FE00-$FE9F: OAM (Object Attribute Memory)
+$FF00-$FF7F: I/O registers
+$FF80-$FFFE: High RAM (HRAM)
+$FFFF: Interrupt enable register
+```
+
+## ROM Organization
+
+### Bank 0 (ROM0): Home Bank
+
+The home bank (`$0000-$3FFF`) is always accessible and contains critical routines:
+
+```asm
+ROM0
+  org $0000
+  "NULL"                    ; $0000-$0007: RST $00 (reset)
+  org $0008
+  "rst8"                    ; $0008-$000F: RST $08
+  org $0010
+  "rst10"                   ; $0010-$0017: RST $10
+  org $0018
+  "rst18"                   ; $0018-$001F: RST $18
+  org $0020
+  "rst20"                   ; $0020-$0027: RST $20
+  org $0028
+  "rst28"                   ; $0028-$002F: RST $28
+  org $0030
+  "rst30"                   ; $0030-$0037: RST $30
+  org $0038
+  "rst38"                   ; $0038-$003F: RST $38
+  org $0040
+  "vblank"                  ; $0040-$0047: VBlank interrupt
+  org $0048
+  "lcd"                     ; $0048-$004F: LCD STAT interrupt
+  org $0050
+  "timer"                   ; $0050-$0057: Timer interrupt
+  org $0058
+  "serial"                  ; $0058-$005F: Serial interrupt
+  org $0060
+  "joypad"                  ; $0060-$0067: Joypad interrupt
+  org $0100
+  "Header"                  ; $0100-$014F: ROM header
+  org $0150
+  "Home"                    ; $0150-$3FFF: Core routines
+```
+
+<Info>
+RST (restart) vectors are special single-byte call instructions that save space. For example, `RST $38` is equivalent to `CALL $0038` but uses only 1 byte instead of 3.
+</Info>
+
+## Work RAM (WRAM)
+
+### WRAM0 ($C000-$CFFF)
+
+The first 4KB of work RAM contains critical game systems:
+
+<Accordion title="Audio RAM ($C000-$C0FF)">
+From `ram/wram.asm`:
+
+```asm
+SECTION "Audio RAM", WRAM0
+
+wSoundID:: db                        ; Current sound to play
+wMuteAudioAndPauseMusic:: db        ; Mute flag
+wStereoPanning:: db                  ; Stereo panning control
+wChannelCommandPointers:: ds NUM_CHANNELS * 2
+wChannelSoundIDs:: ds NUM_CHANNELS
+wChannelFlags1:: ds NUM_CHANNELS
+wChannelFlags2:: ds NUM_CHANNELS
+```
+
+Each audio channel has dedicated RAM for:
+- Command pointers
+- Sound IDs  
+- Status flags
+- Vibrato parameters
+- Pitch slide data
+- Volume envelopes
+</Accordion>
+
+<Accordion title="Sprite State Data ($C100-$C1FF)">
+```asm
+SECTION "Sprite State Data", WRAM0
+
+wSpriteStateData1::  ; 16 sprites × 16 bytes = 256 bytes
+; Structure per sprite:
+; +0: Picture ID
+; +1: Movement status
+; +2: Sprite image index
+; +3: Y screen position delta
+; +4: Y screen position
+; +5: X screen position delta
+; +6: X screen position
+; +7: Intra-animation counter
+; +8: Animation frame counter
+; +9: Facing direction
+; +A: Adjusted Y coordinate
+; +B: Adjusted X coordinate
+; +C: Direction of collision
+```
+
+Player is sprite 0, followed by up to 15 NPC sprites.
+</Accordion>
+
+<Accordion title="Shadow OAM ($C200-$C29F)">
+```asm
+SECTION "OAM Buffer", WRAM0
+
+wShadowOAM::  ; 40 sprites × 4 bytes = 160 bytes
+; Each sprite entry:
+; +0: Y position (minus 16)
+; +1: X position (minus 8)
+; +2: Tile ID
+; +3: Attributes (priority, flip, palette)
+```
+
+This buffer is copied to OAM via DMA during VBlank.
+</Accordion>
+
+<Accordion title="Tilemap and Overworld ($C2A0-$C3FF)">
+```asm
+SECTION "Tilemap", WRAM0
+
+wTileMap:: ds SCREEN_AREA  ; 20×18 = 360 bytes
+; Screen tile buffer
+
+wTileMapBackup:: ds SCREEN_AREA
+; Backup for menu overlays
+
+SECTION "Overworld Map", WRAM0
+
+wOverworldMap:: ds 1300
+; Current map block data (max size)
+```
+</Accordion>
+
+### Battle and Menu Data ($C400-$CFFF)
+
+This region contains variables for:
+- Menu state and cursor positions
+- Joypad input handling
+- List and menu management
+- Battle calculation temporaries
+
+## Main Game State ($D000-$DFFF)
+
+From `ram/wram.asm`, this critical section contains:
+
+### Party Data ($D158-$D2C8)
+
+```asm
+SECTION "Party Data", WRAM0
+
+wPartyCount:: db              ; Number of Pokémon in party (1-6)
+wPartySpecies:: ds PARTY_LENGTH + 1  ; Species list + $FF terminator
+
+wPartyMons::  ; 6 × 44 bytes = 264 bytes
+; Each party_struct contains:
+;   Species (1)
+;   HP (2)
+;   Box level (1)
+;   Status (1)
+;   Types (2)
+;   Catch rate/held item (1)
+;   Moves (4)
+;   OT ID (2)
+;   Experience (3)
+;   HP EV (2)
+;   Attack EV (2)
+;   Defense EV (2)
+;   Speed EV (2)
+;   Special EV (2)
+;   DVs (2)
+;   Move PP (4)
+;   Level (1)
+;   Max HP (2)
+;   Attack (2)
+;   Defense (2)
+;   Speed (2)
+;   Special (2)
+
+wPartyMonOT::  ; 6 × 11 bytes = 66 bytes
+; Original trainer names
+
+wPartyMonNicks::  ; 6 × 11 bytes = 66 bytes
+; Pokémon nicknames
+```
+
+### Pokédex and Inventory ($D2C9-$D346)
+
+```asm
+wPokedexOwned:: flag_array NUM_POKEMON    ; 19 bytes (151 bits)
+wPokedexSeen:: flag_array NUM_POKEMON     ; 19 bytes (151 bits)
+
+wNumBagItems:: db
+wBagItems:: ds BAG_ITEM_CAPACITY * 2 + 1  ; 20 items max
+
+wPlayerMoney:: ds 3  ; BCD format
+wRivalName:: ds NAME_LENGTH
+wOptions:: db
+wObtainedBadges:: flag_array NUM_BADGES
+```
+
+<Note>
+Flag arrays are bit-packed: each byte stores 8 flags. For example, 151 Pokémon require ⌈151/8⌉ = 19 bytes.
+</Note>
+
+### Map and Player State ($D347-$D3B7)
+
+```asm
+wCurMap:: db                   ; Current map ID
+wYCoord:: db                   ; Player Y coordinate
+wXCoord:: db                   ; Player X coordinate
+wYBlockCoord:: db              ; Y in 2×2 blocks
+wXBlockCoord:: db              ; X in 2×2 blocks
+
+wCurMapHeader::                ; Map header data
+wCurMapTileset:: db
+wCurMapHeight:: db
+wCurMapWidth:: db
+wCurMapDataPtr:: dw
+wCurMapTextPtr:: dw
+wCurMapScriptPtr:: dw
+wCurMapConnections:: db
+
+wSpriteSet:: ds SPRITE_SET_LENGTH  ; 11 sprite IDs
+wSpriteSetID:: db
+```
+
+### Battle State ($D058-$D088)
+
+```asm
+wBattleMon::  ; Player's current battler
+wBattleMonSpecies:: db
+wBattleMonHP:: dw
+wBattleMonBoxLevel:: db
+wBattleMonStatus:: db
+wBattleMonType1:: db
+wBattleMonType2:: db
+; ... (full battle_struct)
+
+wEnemyMon::  ; Opponent's current battler
+; Same structure as wBattleMon
+
+wIsInBattle:: db  ; 0=none, 1=wild, 2=trainer
+wBattleType:: db  ; 0=normal, 1=Old Man, 2=Safari
+wBattleResult:: db  ; 0=win, 1=lose, 2=draw
+```
+
+## Video RAM (VRAM)
+
+VRAM is only accessible when the PPU is not drawing (modes 0-2):
+
+```asm
+SECTION "VRAM", VRAM
+
+; $8000-$87FF: Tile blocks 2 and 1 (sprites)
+; $8800-$8FFF: Tile block 1 (shared)
+; $9000-$97FF: Tile block 0 (background)
+; $9800-$9BFF: Background tilemap 0 (32×32)
+; $9C00-$9FFF: Background tilemap 1 (32×32)
+```
+
+<Warning>
+Accessing VRAM during mode 3 (LCD drawing) causes data corruption and graphical glitches.
+</Warning>
+
+## Save RAM (SRAM)
+
+The cartridge battery-backed RAM stores saved games:
+
+```asm
+SRAM $0  ; Bank 0: Sprite buffers
+  "Sprite Buffers"
+
+SRAM $1  ; Bank 1: Main save data
+  "Save Data"
+  ; Contains copy of:
+  ;   - Player name and ID
+  ;   - Badges and progress flags
+  ;   - Party Pokémon
+  ;   - Current box Pokémon
+  ;   - Pokédex
+  ;   - Items and money
+  ;   - Rival name
+  ;   - Current map and position
+
+SRAM $2  ; Bank 2: Box 1-6 data
+  "Saved Boxes 1"
+
+SRAM $3  ; Bank 3: Box 7-12 data
+  "Saved Boxes 2"
+```
+
+Each box stores up to 20 Pokémon with full data.
+
+## High RAM (HRAM)
+
+HRAM (`$FF80-$FFFE`) is fast-access RAM used for critical variables:
+
+```asm
+SECTION "HRAM", HRAM
+
+hSoftReset:: db               ; Soft reset counter
+
+; Multiplication/division (overlapped)
+hMultiplicand:: ds 3
+hMultiplier:: db
+hProduct:: ds 4
+
+hDividend:: ds 4  
+hDivisor:: db
+hQuotient:: ds 4
+hRemainder:: db
+
+; Joypad state
+hJoyHeld:: db                 ; Currently held buttons
+hJoyPressed:: db              ; Newly pressed buttons
+hJoyReleased:: db             ; Newly released buttons
+
+; ROM banking
+hLoadedROMBank:: db           ; Current ROM bank
+hSavedROMBank:: db            ; Saved bank for restoration
+
+; Video synchronization
+hSCX:: db                     ; Scroll X (copied to rSCX)
+hSCY:: db                     ; Scroll Y (copied to rSCY)
+hWY:: db                      ; Window Y (copied to rWY)
+hVBlankOccurred:: db          ; VBlank flag
+
+; DMA and transfers
+hAutoBGTransferEnabled:: db   ; Auto-transfer flag
+hAutoBGTransferDest:: dw      ; Destination address
+hVBlankCopyBGSource:: dw      ; Source for BG copy
+```
+
+<Tip>
+HRAM is accessible even during OAM DMA, making it ideal for the DMA routine itself.
+</Tip>
+
+## Stack
+
+The stack grows downward from `$DFFF`:
+
+```asm
+org $df00
+"Stack"  ; Stack starts at $DFFF and grows down
+```
+
+The stack typically uses 256 bytes or less during normal gameplay.
+
+## Memory Usage Patterns
+
+### Critical Sections
+
+<Steps>
+  <Step title="Read-Only Sections">
+    ROM ($0000-$7FFF) - Contains code and constant data
+  </Step>
+  
+  <Step title="VBlank-Only Access">
+    VRAM ($8000-$9FFF) - Only write during VBlank or LCD off
+  </Step>
+  
+  <Step title="DMA Restrictions">
+    During OAM DMA, only HRAM is accessible
+  </Step>
+  
+  <Step title="Echo RAM Prohibition">
+    Never use $E000-$FDFF; always use $C000-$DDFF instead
+  </Step>
+</Steps>
+
+### RAM Constants
+
+From `constants/ram_constants.asm`:
+
+```asm
+; Options byte ($D355)
+DEF TEXT_DELAY_MASK EQU %111
+DEF TEXT_DELAY_FAST   EQU %001
+DEF TEXT_DELAY_MEDIUM EQU %011
+DEF TEXT_DELAY_SLOW   EQU %101
+
+; Status flags
+wStatusFlags1::  ; $D72C
+  const BIT_STRENGTH_ACTIVE
+  const BIT_SURF_ALLOWED
+  const BIT_GOT_OLD_ROD
+  ; ...
+
+wMiscFlags::  ; $D14
+  const BIT_SEEN_BY_TRAINER
+  const BIT_BOULDER_DUST
+  const BIT_TURNING
+  ; ...
+```
+
+## Memory Access Performance
+
+| Region | Cycles | Notes |
+|--------|--------|-------|
+| HRAM | 8 | Fastest (LD A, [$FF80]) |
+| WRAM | 12 | Normal (LD A, [$C000]) |
+| ROM | 12 | Same as WRAM |
+| VRAM | 12* | *Only during VBlank/HBlank |
+| I/O | 12 | Hardware registers |
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="ROM Structure" href="/architecture/rom-structure" icon="file">
+    Learn how code is organized across ROM banks
+  </Card>
+  <Card title="Bank System" href="/architecture/bank-system" icon="layer-group">
+    Understand ROM banking and far calls
+  </Card>
+</CardGroup>

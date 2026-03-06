@@ -1,0 +1,450 @@
+---
+title: "Constants Reference"
+description: "Comprehensive guide to constants used throughout the Pokémon Red/Blue disassembly"
+icon: "hashtag"
+---
+
+## Overview
+
+Constants in the Pokémon Red/Blue disassembly provide symbolic names for game data, making the code more readable and maintainable. All constant definitions are located in `constants/*.asm` files.
+
+The disassembly uses the `const_def` macro system to automatically enumerate sequential values, reducing errors and making it easy to add or remove entries.
+
+## How Constants Work
+
+Constants are defined using RGBDS assembler syntax with helper macros:
+
+```asm
+; Start enumeration at 0
+const_def
+const NO_MON         ; $00
+const RHYDON         ; $01
+const KANGASKHAN     ; $02
+
+; Start enumeration at a specific value
+const_def 1
+const STAT_HEALTH    ; $01
+const STAT_ATTACK    ; $02
+```
+
+The `const_def` macro initializes a counter, and each `const` increments it automatically.
+
+<Tabs>
+  <Tab title="Pokémon Constants">
+
+### Pokémon IDs
+
+**File:** `constants/pokemon_constants.asm`
+
+Pokémon IDs index multiple data tables including names, evolutions, moves, cries, and Pokédex entries.
+
+```asm
+const_def
+const NO_MON             ; $00
+const RHYDON             ; $01
+const KANGASKHAN         ; $02
+const NIDORAN_M          ; $03
+const CLEFAIRY           ; $04
+const SPEAROW            ; $05
+const VOLTORB            ; $06
+```
+
+**Special Constants:**
+
+```asm
+DEF NUM_POKEMON_INDEXES EQU const_value - 1
+
+; Starter Pokémon
+DEF STARTER1 EQU CHARMANDER
+DEF STARTER2 EQU SQUIRTLE
+DEF STARTER3 EQU BULBASAUR
+
+; Ghost Marowak in Pokémon Tower
+DEF RESTLESS_SOUL EQU MAROWAK
+```
+
+<Note>
+Pokémon IDs in Red/Blue are in internal order, not Pokédex order. For example, Rhydon is $01 while Bulbasaur is $99.
+</Note>
+
+</Tab>
+<Tab title="Item Constants">
+
+### Item IDs
+
+**File:** `constants/item_constants.asm`
+
+Item IDs are used for inventory management, shops, and the bag menu.
+
+```asm
+const_def
+const NO_ITEM       ; $00
+const MASTER_BALL   ; $01
+const ULTRA_BALL    ; $02
+const GREAT_BALL    ; $03
+const POKE_BALL     ; $04
+const TOWN_MAP      ; $05
+const BICYCLE       ; $06
+const SURFBOARD     ; $07
+```
+
+**Badge Constants:**
+
+Badges use item IDs with special handling:
+
+```asm
+const BOULDERBADGE  ; $15
+DEF SAFARI_BAIT EQU BOULDERBADGE ; overload
+const CASCADEBADGE  ; $16
+DEF SAFARI_ROCK EQU CASCADEBADGE ; overload
+const THUNDERBADGE  ; $17
+const RAINBOWBADGE  ; $18
+```
+
+**TM/HM Constants:**
+
+The game uses macros to define TMs and HMs with multiple related constants:
+
+```asm
+DEF NUM_TMS EQU 50
+DEF NUM_HMS EQU 5
+
+; HMs start at $C4
+add_hm CUT          ; $C4
+add_hm FLY          ; $C5
+add_hm SURF         ; $C6
+add_hm STRENGTH     ; $C7
+add_hm FLASH        ; $C8
+
+; TMs start at $C9
+add_tm MEGA_PUNCH   ; $C9
+add_tm RAZOR_WIND   ; $CA
+```
+
+Each TM/HM gets three constants:
+- `TM_<move>` or `HM_<move>`: The item ID
+- `<move>_TMNUM`: Learnable flag index (1-55)
+- `TM##_MOVE` or `HM##_MOVE`: Alias for the move ID
+
+</Tab>
+<Tab title="Move Constants">
+
+### Move IDs
+
+**File:** `constants/move_constants.asm`
+
+Move IDs index the moves data table, names, animations, and sound effects.
+
+```asm
+const_def
+const NO_MOVE      ; 00
+const POUND        ; 01
+const KARATE_CHOP  ; 02
+const DOUBLESLAP   ; 03
+const COMET_PUNCH  ; 04
+const MEGA_PUNCH   ; 05
+const PAY_DAY      ; 06
+```
+
+**Special Move Constants:**
+
+```asm
+DEF NUM_ATTACKS EQU const_value - 1
+DEF CANNOT_MOVE EQU $ff
+
+; Moves double as animation identifiers
+const SHOWPIC_ANIM
+const STATUS_AFFECTED_ANIM
+const ENEMY_HUD_SHAKE_ANIM
+const TRADE_BALL_DROP_ANIM
+```
+
+</Tab>
+  <Tab title="Map Constants">
+
+### Map IDs
+
+**File:** `constants/map_constants.asm`
+
+Map constants use a special `map_const` macro that defines the map ID along with width and height:
+
+```asm
+MACRO map_const
+    const \1
+    DEF \1_WIDTH EQU \2
+    DEF \1_HEIGHT EQU \3
+ENDM
+
+; Towns and cities
+const_def
+map_const PALLET_TOWN,      10,  9 ; $00
+map_const VIRIDIAN_CITY,    20, 18 ; $01
+map_const PEWTER_CITY,      20, 18 ; $02
+map_const CERULEAN_CITY,    20, 18 ; $03
+```
+
+**Map Categories:**
+
+```asm
+DEF NUM_CITY_MAPS EQU const_value
+DEF FIRST_ROUTE_MAP EQU const_value
+DEF FIRST_INDOOR_MAP EQU const_value
+
+; Special return value
+DEF LAST_MAP EQU $ff  ; Returns to last outdoor map
+```
+
+**Indoor Map Groups:**
+
+Indoor maps are organized by location:
+
+```asm
+map_const OAKS_LAB,         5,  6 ; $28
+end_indoor_group PALLET_TOWN
+
+map_const VIRIDIAN_POKECENTER, 7, 4 ; $29
+map_const VIRIDIAN_MART,       4, 4 ; $2A
+map_const VIRIDIAN_GYM,       10, 9 ; $2D
+end_indoor_group VIRIDIAN_CITY
+```
+
+</Tab>
+  <Tab title="Battle Constants">
+
+### Battle Constants
+
+**File:** `constants/battle_constants.asm`
+
+**Move Structure:**
+
+```asm
+rsreset
+DEF MOVE_ANIM   rb
+DEF MOVE_EFFECT rb
+DEF MOVE_POWER  rb
+DEF MOVE_TYPE   rb
+DEF MOVE_ACC    rb
+DEF MOVE_PP     rb
+DEF MOVE_LENGTH EQU _RS
+```
+
+**Stat Constants:**
+
+```asm
+const_def 1
+const STAT_HEALTH
+const STAT_ATTACK
+const STAT_DEFENSE
+const STAT_SPEED
+const STAT_SPECIAL
+DEF NUM_STATS EQU const_value - 1
+
+DEF MAX_LEVEL EQU 100
+DEF NUM_MOVES EQU 4
+DEF MAX_STAT_VALUE EQU 999
+```
+
+**Type Effectiveness:**
+
+```asm
+; Scaled by 10
+DEF SUPER_EFFECTIVE    EQU 20
+DEF MORE_EFFECTIVE     EQU 15
+DEF EFFECTIVE          EQU 10
+DEF NOT_VERY_EFFECTIVE EQU 05
+DEF NO_EFFECT          EQU 00
+```
+
+**Status Conditions:**
+
+```asm
+DEF SLP_MASK EQU %111 ; 0-7 turns
+const_def 3
+const PSN ; 3 - Poisoned
+const BRN ; 4 - Burned
+const FRZ ; 5 - Frozen
+const PAR ; 6 - Paralyzed
+```
+
+**Battle Status Flags:**
+
+```asm
+; wPlayerBattleStatus1 / wEnemyBattleStatus1
+const_def
+const STORING_ENERGY           ; 0 - Bide
+const THRASHING_ABOUT          ; 1 - Thrash, Petal Dance
+const ATTACKING_MULTIPLE_TIMES ; 2 - Double Kick, Fury Attack
+const FLINCHED                 ; 3
+const CHARGING_UP              ; 4 - Solar Beam, Fly
+const USING_TRAPPING_MOVE      ; 5 - Wrap, Bind
+const INVULNERABLE             ; 6 - Fly/Dig charge turn
+const CONFUSED                 ; 7
+```
+
+</Tab>
+  <Tab title="Type Constants">
+
+### Type IDs
+
+**File:** `constants/type_constants.asm`
+
+Types are split into physical and special categories:
+
+```asm
+const_def
+
+DEF PHYSICAL EQU const_value
+const NORMAL       ; $00
+const FIGHTING     ; $01
+const FLYING       ; $02
+const POISON       ; $03
+const GROUND       ; $04
+const ROCK         ; $05
+const BIRD         ; $06
+const BUG          ; $07
+const GHOST        ; $08
+
+; Skip to 20 for special types
+const_next 20
+
+DEF SPECIAL EQU const_value
+const FIRE         ; $14
+const WATER        ; $15
+const GRASS        ; $16
+const ELECTRIC     ; $17
+const PSYCHIC_TYPE ; $18
+const ICE          ; $19
+const DRAGON       ; $1A
+
+DEF NUM_TYPES EQU const_value
+```
+
+<Info>
+The gap between physical and special types (9-19) is unused space in the type system.
+</Info>
+
+</Tab>
+</Tabs>
+
+## Usage Examples
+
+### Checking Pokémon Species
+
+```asm
+ld a, [wCurSpecies]
+cp PIKACHU
+jr z, .isPikachu
+```
+
+### Adding Item to Bag
+
+```asm
+ld hl, wNumBagItems
+ld a, MASTER_BALL
+ld [wcf91], a
+ld a, 1  ; quantity
+ld [wItemQuantity], a
+call AddItemToInventory
+```
+
+### Teaching a Move
+
+```asm
+ld a, THUNDERBOLT
+ld [wMoveNum], a
+ld [wcf91], a
+call IsTMHMMove
+```
+
+### Map Warps
+
+```asm
+ld a, OAKS_LAB
+ld [wDestinationMap], a
+call LoadMapData
+```
+
+## Common Patterns
+
+### const_skip
+
+Skips values in the enumeration (used for unused or reserved slots):
+
+```asm
+const TANGELA            ; $1E
+const_skip               ; $1F
+const_skip               ; $20
+const GROWLITHE          ; $21
+```
+
+### const_next
+
+Jumps to a specific value (cannot go backwards):
+
+```asm
+const_next $C4
+add_hm CUT               ; $C4
+```
+
+### shift_const
+
+Creates bit flag constants:
+
+```asm
+const_def
+shift_const FLAG_BIT_0   ; 1 << 0 = $01
+shift_const FLAG_BIT_1   ; 1 << 1 = $02
+shift_const FLAG_BIT_2   ; 1 << 2 = $04
+```
+
+## Reference Tables
+
+### Key Constant Files
+
+| File | Purpose | Count |
+|------|---------|-------|
+| `pokemon_constants.asm` | Pokémon species IDs | 190 |
+| `item_constants.asm` | Items, TMs, HMs | 250+ |
+| `move_constants.asm` | Move IDs | 165 |
+| `map_constants.asm` | Map IDs | 248 |
+| `type_constants.asm` | Type IDs | 16 |
+| `battle_constants.asm` | Battle mechanics | Many |
+| `sprite_constants.asm` | Sprite IDs | 100+ |
+| `event_constants.asm` | Event flags | Many |
+| `text_constants.asm` | Text IDs | 500+ |
+
+### Exported Constants
+
+```asm
+DEF NUM_POKEMON_INDEXES EQU 190
+DEF NUM_ITEMS EQU 83
+DEF NUM_TMS EQU 50
+DEF NUM_HMS EQU 5
+DEF NUM_TM_HM EQU 55
+DEF NUM_ATTACKS EQU 165
+DEF NUM_MAPS EQU 248
+DEF NUM_TYPES EQU 26
+```
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Use Symbolic Names" icon="tag">
+    Always use constant names instead of hardcoded numbers for better readability and maintainability.
+  </Card>
+  <Card title="Check const_value" icon="calculator">
+    Use `const_value` to get the current enumeration value for array sizing and validation.
+  </Card>
+  <Card title="Document Skips" icon="comment">
+    Add comments explaining why values are skipped with `const_skip`.
+  </Card>
+  <Card title="Group Related Constants" icon="layer-group">
+    Keep related constants in the same file and section for easy reference.
+  </Card>
+</CardGroup>
+
+## Related Pages
+
+- [Macros Reference](/reference/macros) - Learn about the macro system
+- [Data Structures](/reference/data-structures) - Understand how constants index data
+- [Engine Modules](/reference/engine-modules) - See constants in action

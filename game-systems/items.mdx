@@ -1,0 +1,399 @@
+---
+title: "Item System"
+description: "Items, TMs, HMs, and item effect implementations"
+---
+
+The item system manages all usable items, from Poké Balls and medicine to Technical Machines and key items.
+
+## Item IDs
+
+All items are defined in `constants/item_constants.asm` with unique IDs:
+
+<CodeGroup>
+```asm Poké Balls
+const_def
+const NO_ITEM       ; $00
+const MASTER_BALL   ; $01
+const ULTRA_BALL    ; $02
+const GREAT_BALL    ; $03
+const POKE_BALL     ; $04
+const SAFARI_BALL   ; $08
+```
+
+```asm Medicine
+const ANTIDOTE      ; $0B
+const BURN_HEAL     ; $0C
+const ICE_HEAL      ; $0D
+const AWAKENING     ; $0E
+const PARLYZ_HEAL   ; $0F
+const FULL_RESTORE  ; $10
+const MAX_POTION    ; $11
+const HYPER_POTION  ; $12
+const SUPER_POTION  ; $13
+const POTION        ; $14
+```
+
+```asm Evolution Stones
+const MOON_STONE    ; $0A
+const FIRE_STONE    ; $20
+const THUNDER_STONE ; $21
+const WATER_STONE   ; $22
+const LEAF_STONE    ; $2F
+```
+
+```asm Battle Items
+const X_ACCURACY    ; $2E
+const X_ATTACK      ; $41
+const X_DEFEND      ; $42
+const X_SPEED       ; $43
+const X_SPECIAL     ; $44
+const DIRE_HIT      ; $3A
+const GUARD_SPEC    ; $37
+```
+</CodeGroup>
+
+<Info>
+There are 83 base items (`NUM_ITEMS = 83`) before TMs/HMs. Badges reuse item IDs internally for storage purposes.
+</Info>
+
+## Badge Overloading
+
+Badges share IDs with Safari Zone items:
+
+```asm
+const BOULDERBADGE  ; $15
+DEF SAFARI_BAIT EQU BOULDERBADGE ; overload
+const CASCADEBADGE  ; $16
+DEF SAFARI_ROCK EQU CASCADEBADGE ; overload
+```
+
+<Warning>
+This is safe because badges are never in the player's bag—they're stored in a separate bit field. Safari Bait/Rock items only exist during Safari Zone battles.
+</Warning>
+
+## TMs and HMs
+
+Technical Machines and Hidden Machines start at ID `$C4`:
+
+<CodeGroup>
+```asm HM Definitions
+DEF HM01 EQU const_value
+add_hm CUT          ; $C4
+add_hm FLY          ; $C5
+add_hm SURF         ; $C6
+add_hm STRENGTH     ; $C7
+add_hm FLASH        ; $C8
+DEF NUM_HMS EQU const_value - HM01
+```
+
+```asm TM Definitions
+DEF TM01 EQU const_value
+add_tm MEGA_PUNCH   ; $C9
+add_tm RAZOR_WIND   ; $CA
+add_tm SWORDS_DANCE ; $CB
+add_tm WHIRLWIND    ; $CC
+; ... 46 more TMs ...
+add_tm SUBSTITUTE   ; $FA
+```
+</CodeGroup>
+
+<Note>
+There are 50 TMs and 5 HMs, requiring 7 bytes (56 bits) to store compatibility flags per Pokémon. One bit remains unused.
+</Note>
+
+### TM/HM Move Mapping
+
+Each TM/HM defines three constants:
+
+```asm
+; Example: HM01
+HM_CUT          ; Item ID ($C4)
+CUT_TMNUM       ; TM/HM flag number (51)
+HM01_MOVE       ; Alias for move ID (equals CUT)
+```
+
+This allows the code to:
+1. Reference the item by name (`HM_CUT`)
+2. Check compatibility flags (`CUT_TMNUM`)
+3. Know which move it teaches (`HM01_MOVE`)
+
+## Item Usage System
+
+Item effects are handled by `engine/items/item_effects.asm` via a jump table:
+
+```asm
+UseItem_::
+    ld a, 1
+    ld [wActionResultOrTookBattleTurn], a ; initialise to success value
+    ld a, [wCurItem]
+    cp HM01
+    jp nc, ItemUseTMHM
+    ld hl, ItemUsePtrTable
+    dec a
+    add a
+    ld c, a
+    ld b, 0
+    add hl, bc
+    ld a, [hli]
+    ld h, [hl]
+    ld l, a
+    jp hl
+```
+
+<Steps>
+  <Step title="Initialize Result">
+    Sets action result to 1 (success) by default.
+  </Step>
+  
+  <Step title="Check for TM/HM">
+    If item ID ≥ HM01, jump to TM/HM handler.
+  </Step>
+  
+  <Step title="Look Up Handler">
+    Use item ID as index into `ItemUsePtrTable`.
+  </Step>
+  
+  <Step title="Execute Handler">
+    Jump to the appropriate item effect function.
+  </Step>
+</Steps>
+
+## Item Effect Table
+
+From `engine/items/item_effects.asm`:
+
+<CodeGroup>
+```asm Capture Items
+ItemUsePtrTable:
+    dw ItemUseBall       ; MASTER_BALL
+    dw ItemUseBall       ; ULTRA_BALL
+    dw ItemUseBall       ; GREAT_BALL
+    dw ItemUseBall       ; POKE_BALL
+```
+
+```asm Key Items
+    dw ItemUseTownMap    ; TOWN_MAP
+    dw ItemUseBicycle    ; BICYCLE
+    dw ItemUseSurfboard  ; SURFBOARD
+    dw ItemUsePokedex    ; POKEDEX
+```
+
+```asm Medicine
+    dw ItemUseMedicine   ; ANTIDOTE
+    dw ItemUseMedicine   ; BURN_HEAL
+    dw ItemUseMedicine   ; ICE_HEAL
+    dw ItemUseMedicine   ; AWAKENING
+    dw ItemUseMedicine   ; PARLYZ_HEAL
+    dw ItemUseMedicine   ; FULL_RESTORE
+    dw ItemUseMedicine   ; MAX_POTION
+```
+
+```asm Evolution Stones
+    dw ItemUseEvoStone   ; MOON_STONE
+    dw ItemUseEvoStone   ; FIRE_STONE
+    dw ItemUseEvoStone   ; THUNDER_STONE
+    dw ItemUseEvoStone   ; WATER_STONE
+    dw ItemUseEvoStone   ; LEAF_STONE
+```
+
+```asm Vitamins
+    dw ItemUseVitamin    ; HP_UP
+    dw ItemUseVitamin    ; PROTEIN
+    dw ItemUseVitamin    ; IRON
+    dw ItemUseVitamin    ; CARBOS
+    dw ItemUseVitamin    ; CALCIUM
+    dw ItemUseVitamin    ; RARE_CANDY
+```
+</CodeGroup>
+
+<Info>
+Multiple items can share the same handler function. For example, all medicine items use `ItemUseMedicine`, which internally checks which specific item was used.
+</Info>
+
+## Unusable Items
+
+Some items in the bag cannot be used:
+
+```asm
+dw UnusableItem      ; THUNDERBADGE
+dw UnusableItem      ; RAINBOWBADGE
+dw UnusableItem      ; NUGGET
+dw UnusableItem      ; COIN
+dw UnusableItem      ; GOLD_TEETH
+```
+
+These are either key items that activate automatically or sellable items with no use effect.
+
+## Item Categories
+
+### Consumable Battle Items
+
+X Stats, Guard Spec, and Dire Hit:
+
+```asm
+dw ItemUseXStat      ; X_ATTACK
+dw ItemUseXStat      ; X_DEFEND
+dw ItemUseXStat      ; X_SPEED
+dw ItemUseXStat      ; X_SPECIAL
+dw ItemUseGuardSpec  ; GUARD_SPEC
+dw ItemUseDireHit    ; DIRE_HIT
+dw ItemUseXAccuracy  ; X_ACCURACY
+```
+
+These items apply temporary stat boosts during battle and are consumed on use.
+
+### PP Restoration
+
+```asm
+dw ItemUsePPRestore  ; ETHER
+dw ItemUsePPRestore  ; MAX_ETHER
+dw ItemUsePPRestore  ; ELIXER
+dw ItemUsePPRestore  ; MAX_ELIXER
+dw ItemUsePPUp       ; PP_UP
+```
+
+- **Ether/Max Ether**: Restore PP to one move (10 or full)
+- **Elixir/Max Elixir**: Restore PP to all moves (10 each or full)
+- **PP Up**: Permanently increase max PP by 1/5 of base value (up to 3 uses)
+
+### Fishing Rods
+
+```asm
+dw ItemUseOldRod     ; OLD_ROD
+dw ItemUseGoodRod    ; GOOD_ROD
+dw ItemUseSuperRod   ; SUPER_ROD
+```
+
+Each rod triggers fishing encounters with different wild Pokémon pools.
+
+## Key Items
+
+Key items are tracked with bit flags in `data/items/key_items.asm`:
+
+```asm
+KeyItemFlags:
+    db BICYCLE
+    db SURF
+    db POKE_FLUTE
+    db SECRET_KEY
+    db CARD_KEY
+    db LIFT_KEY
+    db SILPH_SCOPE
+    db -1 ; end
+```
+
+<Warning>
+Key items cannot be sold or tossed. They remain in the bag until the game is completed or a specific story event removes them.
+</Warning>
+
+## Repel System
+
+```asm
+dw ItemUseRepel      ; REPEL
+dw ItemUseSuperRepel ; SUPER_REPEL
+dw ItemUseMaxRepel   ; MAX_REPEL
+```
+
+- **Repel**: 100 steps
+- **Super Repel**: 200 steps
+- **Max Repel**: 250 steps
+
+Repels prevent encounters with wild Pokémon lower level than the first Pokémon in the party.
+
+## Item Capacity Limits
+
+```asm
+DEF NUM_ITEMS EQU const_value - 1  ; 83 regular items
+DEF NUM_TMS EQU 50
+DEF NUM_HMS EQU 5
+DEF NUM_TM_HM EQU NUM_TMS + NUM_HMS  ; 55 total
+
+DEF MAX_HIDDEN_ITEMS EQU 112
+DEF MAX_HIDDEN_COINS EQU 16
+```
+
+- Regular bag slots are unlimited per item type
+- PC item storage is unlimited
+- Hidden items tracked via bit flags (max 112)
+- Hidden coins tracked separately (max 16)
+
+## Special Items
+
+### Safari Zone Items
+
+```asm
+dw ItemUseBait       ; BOULDERBADGE (overloaded)
+dw ItemUseRock       ; CASCADEBADGE (overloaded)
+```
+
+Bait and rocks only exist during Safari Zone battles:
+- **Bait**: Decreases catch rate, decreases flee chance
+- **Rock**: Increases catch rate, increases flee chance
+
+### Field Effects
+
+<Accordion title="Escape Rope">
+```asm
+dw ItemUseEscapeRope ; ESCAPE_ROPE
+```
+Instantly exits dungeons, returning to the last Pokémon Center.
+</Accordion>
+
+<Accordion title="Poké Flute">
+```asm
+dw ItemUsePokeFlute  ; POKE_FLUTE
+```
+Wakes sleeping Pokémon in battle and awakens Snorlax on the overworld.
+</Accordion>
+
+<Accordion title="Itemfinder">
+```asm
+dw ItemUseItemfinder ; ITEMFINDER
+```
+Detects hidden items nearby with an on-screen indicator.
+</Accordion>
+
+<Accordion title="Poké Doll">
+```asm
+dw ItemUsePokeDoll   ; POKE_DOLL
+```
+Guaranteed escape from wild battles, including Ghost Marowak.
+</Accordion>
+
+## Item Pricing
+
+Item prices are stored in `data/items/prices.asm` as 24-bit BCD (Binary Coded Decimal) values:
+
+```asm
+ItemPrices:
+    bcd3 0     ; MASTER_BALL (cannot buy)
+    bcd3 1200  ; ULTRA_BALL
+    bcd3 600   ; GREAT_BALL
+    bcd3 200   ; POKE_BALL
+```
+
+TM prices are in a separate table (`data/items/tm_prices.asm`) since TMs have different IDs.
+
+<CardGroup cols={2}>
+  <Card title="Pokémon" icon="dragon" href="/game-systems/pokemon">
+    TM/HM compatibility
+  </Card>
+  <Card title="Battle Engine" icon="bolt" href="/game-systems/battle-engine">
+    Battle item effects
+  </Card>
+  <Card title="Reference" icon="book" href="/reference/constants">
+    Item constants and data
+  </Card>
+  <Card title="Engine Modules" icon="gears" href="/reference/engine-modules">
+    Item engine implementation
+  </Card>
+</CardGroup>
+
+## Key Files
+
+- `constants/item_constants.asm` - Item IDs and TM/HM definitions
+- `engine/items/item_effects.asm` - Item usage handlers
+- `data/items/names.asm` - Item name strings
+- `data/items/prices.asm` - Item prices
+- `data/items/key_items.asm` - Key item flags
+- `engine/items/` - Item-related engine code

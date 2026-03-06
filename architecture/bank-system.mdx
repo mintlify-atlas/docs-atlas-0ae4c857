@@ -1,0 +1,609 @@
+---
+title: 'Bank System'
+description: 'Understanding ROM banking and far calls in Pokémon Red/Blue'
+---
+
+## Overview
+
+The Game Boy's 16-bit address bus can only access 64KB of memory at once, but Pokémon Red/Blue contain 1MB of ROM. The MBC3 (Memory Bank Controller 3) solves this through **banking** - switching which 16KB section of ROM is visible at addresses `$4000-$7FFF`.
+
+## The Banking Problem
+
+<CodeGroup>
+```text Memory Without Banking
+$0000-$3FFF: Bank 0 (16KB) - Fixed
+$4000-$7FFF: Bank 1 (16KB) - Fixed
+$8000-$FFFF: RAM, I/O, etc.
+
+Total ROM: 32KB
+```
+
+```text Memory With Banking
+$0000-$3FFF: Bank 0 (16KB) - Always Bank 0
+$4000-$7FFF: Bank N (16KB) - Switchable (1-127)
+$8000-$FFFF: RAM, I/O, etc.
+
+Total ROM: 2MB possible (128 banks)
+           (Red/Blue use 45 banks = 720KB)
+```
+</CodeGroup>
+
+<Info>
+Bank 0 is **always** mapped to `$0000-$3FFF` and cannot be switched. This is why core routines go in Bank 0 - they're always accessible.
+</Info>
+
+## Bank Switching Mechanics
+
+### Hardware Register
+
+The MBC3 listens to writes to ROM addresses for banking:
+
+```asm
+def rROMB equ $2000  ; ROM bank select (write-only)
+```
+
+Writing to any address in `$2000-$3FFF` changes the current bank:
+
+```asm
+; Switch to bank 5
+ld a, 5
+ld [rROMB], a
+
+; Now $4000-$7FFF contains bank 5's data
+```
+
+<Warning>
+Writing 0 to `$2000` actually selects bank 1 on MBC3. Banks are numbered 1-127, with 0 being an alias for 1.
+</Warning>
+
+## Banking in Practice
+
+### Direct Bank Switching
+
+The simplest method:
+
+```asm
+; Save current bank
+ldh a, [hLoadedROMBank]
+push af
+
+; Switch to bank $E (Battle Engine 7)
+ld a, BANK(MoveData)
+ld [rROMB], a  
+ldh [hLoadedROMBank], a
+
+; Access data at $4000+ in bank $E
+call ProcessMoveData
+
+; Restore previous bank
+pop af
+ld [rROMB], a
+ldh [hLoadedROMBank], a
+```
+
+### The Bankswitch Function
+
+From `home/bankswitch.asm`, the game provides a standard bankswitching routine:
+
+```asm
+Bankswitch::
+; Call a function in another bank
+; Input:
+;   b = bank number
+;   hl = function address
+; Returns to caller's bank after function completes
+
+    ldh a, [hLoadedROMBank]
+    push af              ; Save current bank
+    
+    ld a, b
+    ldh [hLoadedROMBank], a
+    ld [rROMB], a        ; Switch banks
+    
+    call CallHL          ; Call the function
+    
+    pop af               ; Restore bank
+    ldh [hLoadedROMBank], a
+    ld [rROMB], a
+    ret
+
+CallHL:
+    jp hl                ; Jump to address in hl
+```
+
+## Far Call Macros
+
+The disassembly provides convenient macros in `macros/farcall.asm`:
+
+### farcall
+
+The most common macro for calling functions in other banks:
+
+```asm
+MACRO farcall
+    ld b, BANK(\1)       ; Load bank number
+    ld hl, \1            ; Load function address  
+    call Bankswitch      ; Switch and call
+ENDM
+```
+
+Usage example:
+
+```asm
+; Call a function in another bank
+farcall LoadPokemonData
+; Automatically:
+; 1. Saves current bank
+; 2. Switches to LoadPokemonData's bank  
+; 3. Calls LoadPokemonData
+; 4. Restores original bank
+; 5. Returns to caller
+```
+
+### callfar
+
+Identical to `farcall` but loads registers in different order:
+
+```asm
+MACRO callfar
+    ld hl, \1            ; Load address first
+    ld b, BANK(\1)       ; Then bank
+    call Bankswitch
+ENDM
+```
+
+<Note>
+The difference between `farcall` and `callfar` is purely stylistic - they generate identical machine code after assembly.
+</Note>
+
+### farjp
+
+For jumping instead of calling:
+
+```asm
+MACRO farjp
+    ld b, BANK(\1)
+    ld hl, \1
+    jp Bankswitch        ; jp instead of call
+ENDM
+```
+
+Useful when you won't return to the current bank:
+
+```asm
+; Exit current function and jump to another bank
+farjp SomeOtherFunction
+; Does not return here
+```
+
+### jpfar
+
+Same as `farjp` with register order swapped:
+
+```asm
+MACRO jpfar
+    ld hl, \1
+    ld b, BANK(\1)
+    jp Bankswitch
+ENDM
+```
+
+## Home Calls
+
+When calling Bank 0 functions from banked code:
+
+### homecall
+
+```asm
+MACRO homecall
+    ldh a, [hLoadedROMBank]
+    push af              ; Save current bank
+    
+    ld a, BANK(\1)       ; Load bank 0
+    ldh [hLoadedROMBank], a
+    ld [rROMB], a
+    
+    call \1              ; Direct call
+    
+    pop af               ; Restore bank
+    ldh [hLoadedROMBank], a  
+    ld [rROMB], a
+ENDM
+```
+
+<Tip>
+Since Bank 0 is always accessible at `$0000-$3FFF`, you can usually just `call` functions there directly without banking. `homecall` is mainly used when the function might need to know which bank called it.
+</Tip>
+
+### homecall_sf
+
+Same as `homecall` but preserves CPU flags:
+
+```asm
+MACRO homecall_sf  ; "sf" = save flags
+    ldh a, [hLoadedROMBank]
+    push af
+    
+    ld a, BANK(\1)
+    ldh [hLoadedROMBank], a
+    ld [rROMB], a
+    
+    call \1
+    
+    pop bc               ; Pop into bc instead of af
+    ld a, b              ; to preserve flags
+    ldh [hLoadedROMBank], a
+    ld [rROMB], a
+ENDM
+```
+
+Useful when you need zero flag, carry flag, etc. to persist:
+
+```asm
+cp 5                    ; Compare with 5
+homecall_sf DoSomething ; Zero flag preserved
+jr z, .wasEqual        ; Can still branch on result
+```
+
+## Bank Number Constants
+
+The assembler automatically defines bank numbers:
+
+```asm
+; In any source file:
+SECTION "Battle Core", ROMX
+
+BattleCore::
+    ; ...
+    
+; Somewhere else:
+farcall BattleCore       ; Assembler knows BANK(BattleCore)
+```
+
+The `BANK()` function is evaluated at assembly time:
+
+```asm
+ld a, BANK(LoadPokemonData)  ; Becomes: ld a, $08
+ld a, BANK(BattleCore)        ; Becomes: ld a, $0F
+ld a, BANK(MoveData)          ; Becomes: ld a, $0E
+```
+
+## Bank Management Variables
+
+From `ram/hram.asm`:
+
+```asm
+hLoadedROMBank:: db    ; Current ROM bank ($FF80)
+hSavedROMBank:: db     ; Saved bank for nested calls ($FF81)
+```
+
+These HRAM variables track the current bank:
+
+```asm
+; Check current bank
+ldh a, [hLoadedROMBank]
+cp BANK(SomeFunction)
+jr nz, .wrongBank
+
+; Temporarily save for nested call
+ldh a, [hLoadedROMBank]
+ldh [hSavedROMBank], a
+```
+
+<Info>
+HRAM (`$FF80-$FFFE`) allows fast access using the `ldh` instruction, which is why bank tracking variables live there.
+</Info>
+
+## Common Banking Patterns
+
+### Pattern 1: Call and Return
+
+Most common - call a function in another bank:
+
+```asm
+; In Bank 1
+DoSomething::
+    ; Need to access move data in bank $E
+    farcall GetMoveData
+    ; Returns here, back in bank 1
+    ret
+```
+
+### Pattern 2: Load Data
+
+Switching banks to read data:
+
+```asm
+; Load bank containing Pokémon names
+ld a, BANK(MonNames)
+ld [rROMB], a
+ldh [hLoadedROMBank], a
+
+; Now read from $4000+ in that bank
+ld hl, MonNames
+ld a, [hli]  ; Read first character
+
+; Restore previous bank
+ld a, [wPreviousBank]
+ld [rROMB], a
+```
+
+### Pattern 3: Nested Far Calls
+
+Functions calling other banked functions:
+
+```asm
+; In Bank 3
+FunctionInBank3::
+    ; Bankswitch automatically handles nesting
+    farcall FunctionInBank7
+    ; Returns here
+    farcall FunctionInBank10  
+    ; Returns here
+    ret  ; Returns to original caller
+```
+
+The Bankswitch function's push/pop mechanism handles this automatically.
+
+### Pattern 4: Jump Chains
+
+Using `farjp` to chain between banks:
+
+```asm
+; In Bank 1
+InitBattle::
+    ; Do initial setup
+    ; ...
+    
+    ; Jump to battle core in bank $F
+    farjp BattleCore
+    ; Does not return
+```
+
+## Bank Switching Overhead
+
+Far calls have a performance cost:
+
+<Accordion title="Cost Breakdown">
+```asm
+; farcall overhead:
+ld b, BANK(Function)    ; 8 cycles
+ld hl, Function         ; 12 cycles  
+call Bankswitch         ; 24 cycles
+
+; Inside Bankswitch:
+ldh a, [hLoadedROMBank] ; 12 cycles
+push af                 ; 16 cycles
+ld a, b                 ; 4 cycles
+ldh [hLoadedROMBank], a ; 12 cycles
+ld [rROMB], a          ; 16 cycles
+call CallHL            ; 24 cycles
+; (function executes)
+pop af                 ; 12 cycles
+ldh [hLoadedROMBank], a ; 12 cycles  
+ld [rROMB], a          ; 16 cycles
+ret                    ; 16 cycles
+ret to original caller ; 16 cycles
+
+Total overhead: ~200 cycles (~48 microseconds)
+```
+</Accordion>
+
+<Warning>
+This is why frequently-called functions are placed in Bank 0 - they can be called directly without the ~200 cycle overhead.
+</Warning>
+
+## Bank-Aware Pointers
+
+Some data structures include bank numbers:
+
+```asm
+; Map script pointer (3 bytes)
+MapScriptPointer:
+    db BANK(MapScript)   ; Bank number
+    dw MapScript         ; Address
+
+; Loading it:
+ld a, [MapScriptPointer]
+ld [rROMB], a
+ld hl, [MapScriptPointer + 1]
+call hl
+```
+
+## Debugging Bank Issues
+
+<Steps>
+  <Step title="Bank Mismatch Error">
+    If code tries to access data at `$4000+` without switching banks first:
+    
+    ```asm
+    ; Wrong bank!
+    ld hl, $4500
+    ld a, [hl]  ; Reads from whatever bank is loaded
+    ```
+    
+    Always ensure correct bank is loaded.
+  </Step>
+  
+  <Step title="Bank Not Restored">
+    If a function changes banks and doesn't restore:
+    
+    ```asm
+    BadFunction::
+        ld a, 5
+        ld [rROMB], a
+        ; ... do stuff ...
+        ret  ; Oops! Bank 5 still loaded
+    ```
+    
+    Caller expects their bank to still be loaded.
+  </Step>
+  
+  <Step title="Nested Call Issues">
+    Using `jp` instead of `call` breaks nesting:
+    
+    ```asm
+    ; Wrong!
+    ld b, BANK(Function)
+    ld hl, Function
+    jp Bankswitch  ; Doesn't return to restore bank
+    ```
+    
+    Use `call Bankswitch` for returnable far calls.
+  </Step>
+  
+  <Step title="Using Symbol Files">
+    Check `.sym` file to verify function banks:
+    
+    ```
+    0e:4000 MoveData
+    0f:4000 BattleCore
+    ```
+    
+    First two digits are the bank number.
+  </Step>
+</Steps>
+
+## Bank Switching and Interrupts
+
+<Warning>
+Interrupts can occur during bank switching! The VBlank handler must:
+
+1. Save the current bank
+2. Switch to its required bank (if any)
+3. Do VBlank work
+4. Restore the saved bank
+
+This is why `hLoadedROMBank` is in HRAM - fast access during critical sections.
+</Warning>
+
+```asm
+VBlankHandler::
+    push af
+    push bc
+    push de  
+    push hl
+    
+    ldh a, [hLoadedROMBank]
+    push af              ; Save bank state
+    
+    ; Do VBlank work (may need specific banks)
+    call UpdateSprites
+    
+    pop af
+    ld [rROMB], a       ; Restore bank
+    ldh [hLoadedROMBank], a
+    
+    pop hl
+    pop de
+    pop bc
+    pop af
+    reti
+```
+
+## Banking Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Keep Core in Bank 0" icon="house">
+    Put frequently-called functions in the home bank to avoid overhead
+  </Card>
+  
+  <Card title="Use Macros" icon="code">
+    Always use `farcall`/`farjp` macros instead of manual banking
+  </Card>
+  
+  <Card title="Group Related Code" icon="layer-group">
+    Keep related functions in the same bank to minimize far calls
+  </Card>
+  
+  <Card title="Document Bank Usage" icon="book">
+    Comment which banks functions use for maintenance
+  </Card>
+</CardGroup>
+
+## Bank Switching Examples
+
+### Example 1: Loading Pokémon Data
+
+```asm
+; Caller wants to load Pikachu's base stats
+LoadPikachuStats::
+    ld a, PIKACHU
+    ld [wCurSpecies], a
+    
+    ; GetMonHeader is in bank $E with the data
+    farcall GetMonHeader
+    
+    ; wMonHeader now contains Pikachu's stats
+    ld a, [wMonHBaseHP]
+    ; Use the data...
+    ret
+```
+
+### Example 2: Displaying Text
+
+```asm
+; Text pointers include bank:
+ProfOakText::
+    db BANK(ProfOakTextString)
+    dw ProfOakTextString
+
+; Display function:
+DisplayText::
+    ld a, [wTextPointer]       ; Get bank
+    ld [rROMB], a              ; Switch
+    ld hl, [wTextPointer + 1]  ; Get address
+    call PrintText             ; Display
+    ; (Bank restored elsewhere)
+    ret
+```
+
+### Example 3: Battle Move Execution
+
+```asm
+; In Battle Core (bank $F)
+ExecutePlayerMove::
+    ld a, [wPlayerSelectedMove]
+    
+    ; Move effects are in bank $E
+    farcall GetMoveEffect
+    
+    ; Execute in current bank
+    call DoMoveEffect
+    ret
+```
+
+## Summary
+
+<Steps>
+  <Step title="Bank 0 is Always Accessible">
+    Addresses `$0000-$3FFF` always map to Bank 0
+  </Step>
+  
+  <Step title="Banks 1+ are Switchable">
+    Write to `$2000` to switch what's visible at `$4000-$7FFF`
+  </Step>
+  
+  <Step title="Use Far Call Macros">
+    `farcall`, `farjp`, `homecall` handle banking automatically
+  </Step>
+  
+  <Step title="Track Current Bank">
+    `hLoadedROMBank` in HRAM tracks which bank is loaded
+  </Step>
+  
+  <Step title="Far Calls Have Overhead">
+    ~200 cycles per far call vs. ~24 for local call
+  </Step>
+</Steps>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="ROM Structure" href="/architecture/rom-structure" icon="file">
+    See what's in each bank
+  </Card>
+  <Card title="Memory Layout" href="/architecture/memory-layout" icon="memory">
+    Understand RAM organization
+  </Card>
+</CardGroup>

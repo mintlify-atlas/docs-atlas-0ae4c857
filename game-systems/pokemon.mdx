@@ -1,0 +1,396 @@
+---
+title: "Pokémon Data System"
+description: "Pokémon species, stats, moves, evolution, and data structures"
+---
+
+The Pokémon data system defines all 151 species, their base stats, movesets, evolution chains, and growth patterns.
+
+## Pokémon IDs
+
+Each Pokémon has an internal ID used throughout the codebase. From `constants/pokemon_constants.asm`:
+
+<Note>
+Internal IDs are **not** the same as Pokédex numbers! The internal order was determined by development order, not the Pokédex.
+</Note>
+
+<CodeGroup>
+```asm Starter Pokémon
+const BULBASAUR   ; $99
+const CHARMANDER  ; $B0
+const SQUIRTLE    ; $B1
+
+DEF STARTER1 EQU CHARMANDER
+DEF STARTER2 EQU SQUIRTLE
+DEF STARTER3 EQU BULBASAUR
+```
+
+```asm Legendary Pokémon
+const ARTICUNO  ; $4A
+const ZAPDOS    ; $4B
+const MOLTRES   ; $49
+const MEWTWO    ; $83
+const MEW       ; $15
+```
+
+```asm Common Pokémon
+const PIDGEY    ; $24
+const RATTATA   ; $A5
+const PIKACHU   ; $54
+const RHYDON    ; $01  ; First Pokémon created!
+```
+</CodeGroup>
+
+<Info>
+Rhydon (ID `$01`) is the first Pokémon in the internal index, suggesting it was the first Pokémon designed during development.
+</Info>
+
+## Base Stats Structure
+
+Each Pokémon's base stats are defined in `data/pokemon/base_stats/*.asm` using a standardized format.
+
+### Data Structure
+
+```asm
+rsreset
+DEF BASE_DEX_NO      rb
+DEF BASE_STATS       rb NUM_STATS
+rsset BASE_STATS
+DEF BASE_HP          rb
+DEF BASE_ATK         rb
+DEF BASE_DEF         rb
+DEF BASE_SPD         rb
+DEF BASE_SPC         rb
+DEF BASE_TYPES       rw
+rsset BASE_TYPES
+DEF BASE_TYPE_1      rb
+DEF BASE_TYPE_2      rb
+DEF BASE_CATCH_RATE  rb
+DEF BASE_EXP         rb
+DEF BASE_PIC_SIZE    rb
+DEF BASE_FRONTPIC    rw
+DEF BASE_BACKPIC     rw
+DEF BASE_MOVES       rb NUM_MOVES
+DEF BASE_GROWTH_RATE rb
+DEF BASE_TMHM        rb (NUM_TM_HM + 7) / 8
+DEF BASE_DATA_SIZE EQU _RS
+```
+
+### Example: Bulbasaur
+
+From `data/pokemon/base_stats/bulbasaur.asm`:
+
+```asm
+db DEX_BULBASAUR ; pokedex id
+
+db  45,  49,  49,  45,  65
+;   hp  atk  def  spd  spc
+
+db GRASS, POISON ; type
+db 45 ; catch rate
+db 64 ; base exp
+
+INCBIN "gfx/pokemon/front/bulbasaur.pic", 0, 1 ; sprite dimensions
+dw BulbasaurPicFront, BulbasaurPicBack
+
+db TACKLE, GROWL, NO_MOVE, NO_MOVE ; level 1 learnset
+db GROWTH_MEDIUM_SLOW ; growth rate
+
+; tm/hm learnset
+tmhm SWORDS_DANCE, TOXIC,        BODY_SLAM,    TAKE_DOWN,    DOUBLE_EDGE,  \
+     RAGE,         MEGA_DRAIN,   SOLARBEAM,    MIMIC,        DOUBLE_TEAM,  \
+     REFLECT,      BIDE,         REST,         SUBSTITUTE,   CUT
+; end
+
+db 0 ; padding
+```
+
+<Steps>
+  <Step title="Pokédex Number">
+    Links the internal ID to the Pokédex number for display.
+  </Step>
+  
+  <Step title="Base Stats">
+    HP, Attack, Defense, Speed, and Special in order. These values are used to calculate individual stats.
+  </Step>
+  
+  <Step title="Type Information">
+    Primary and secondary types. Single-type Pokémon list the same type twice.
+  </Step>
+  
+  <Step title="Catch and Experience">
+    Catch rate (lower = harder) and base experience yield when defeated.
+  </Step>
+  
+  <Step title="Graphics">
+    Front and back sprite pointers for battle display.
+  </Step>
+  
+  <Step title="Starting Moves">
+    Up to 4 moves known at level 1. `NO_MOVE` fills empty slots.
+  </Step>
+  
+  <Step title="Growth Rate">
+    Determines experience curve for leveling up.
+  </Step>
+  
+  <Step title="TM/HM Compatibility">
+    Bit flags indicating which Technical and Hidden Machines this Pokémon can learn.
+  </Step>
+</Steps>
+
+## Growth Rates
+
+Six growth rate curves determine how quickly Pokémon level up:
+
+```asm
+const_def
+const GROWTH_MEDIUM_FAST
+const GROWTH_SLIGHTLY_FAST
+const GROWTH_SLIGHTLY_SLOW
+const GROWTH_MEDIUM_SLOW
+const GROWTH_FAST
+const GROWTH_SLOW
+DEF NUM_GROWTH_RATES EQU const_value
+```
+
+The actual experience curves are defined in `data/growth_rates.asm` as lookup tables for each level.
+
+<Info>
+- **Fast**: 800,000 EXP to reach level 100 (e.g., Clefairy, Jigglypuff)
+- **Medium Fast**: 1,000,000 EXP (e.g., most starters)
+- **Medium Slow**: 1,059,860 EXP (e.g., Bulbasaur line)
+- **Slow**: 1,250,000 EXP (e.g., Magikarp, legendary birds)
+</Info>
+
+## Party Structure
+
+Pokémon in the player's party use an expanded data structure:
+
+<CodeGroup>
+```asm Box Storage Format
+rsreset
+DEF MON_SPECIES    rb
+DEF MON_HP         rw
+DEF MON_BOX_LEVEL  rb
+DEF MON_STATUS     rb
+DEF MON_TYPE       rw
+DEF MON_CATCH_RATE rb
+DEF MON_MOVES      rb NUM_MOVES
+DEF MON_OTID       rw
+DEF MON_EXP        rb 3
+DEF MON_HP_EXP     rw
+DEF MON_ATK_EXP    rw
+DEF MON_DEF_EXP    rw
+DEF MON_SPD_EXP    rw
+DEF MON_SPC_EXP    rw
+DEF MON_DVS        rw
+DEF MON_PP         rb NUM_MOVES
+DEF BOXMON_STRUCT_LENGTH EQU _RS ; $21 (33 bytes)
+```
+
+```asm Party Addition
+DEF MON_LEVEL      rb
+DEF MON_STATS      rw NUM_STATS
+rsset MON_STATS
+DEF MON_MAXHP      rw
+DEF MON_ATK        rw
+DEF MON_DEF        rw
+DEF MON_SPD        rw
+DEF MON_SPC        rw
+DEF PARTYMON_STRUCT_LENGTH EQU _RS ; $2C (44 bytes)
+```
+</CodeGroup>
+
+<Warning>
+Box storage format is 33 bytes, while party format is 44 bytes. The extra 11 bytes store precalculated stats for faster access during battle.
+</Warning>
+
+## Stats Calculation
+
+Stats are calculated from base stats, DVs, and stat experience:
+
+### DVs (Determinant Values)
+
+DVs are hidden values from 0-15 that add individuality:
+
+```asm
+DEF MON_DVS rw  ; 2 bytes store 4 DVs (4 bits each)
+```
+
+The DV word packs four values:
+- Bits 12-15: Attack DV
+- Bits 8-11: Defense DV
+- Bits 4-7: Speed DV
+- Bits 0-3: Special DV
+
+<Note>
+HP DV is calculated from the other four DVs: if Attack DV is odd, add 8; if Defense DV is odd, add 4; if Speed DV is odd, add 2; if Special DV is odd, add 1.
+</Note>
+
+### Stat Experience
+
+Each defeated Pokémon grants stat experience equal to its base stats:
+
+```asm
+DEF MON_HP_EXP     rw
+DEF MON_ATK_EXP    rw
+DEF MON_DEF_EXP    rw
+DEF MON_SPD_EXP    rw
+DEF MON_SPC_EXP    rw
+```
+
+Stat EXP can go up to 65535 and provides up to +63 points at level 100.
+
+## Evolution System
+
+Three evolution methods are supported:
+
+```asm
+const_def 1
+const EVOLVE_LEVEL ; 1
+const EVOLVE_ITEM  ; 2
+const EVOLVE_TRADE ; 3
+```
+
+Evolution data in `data/pokemon/evos_moves.asm` defines:
+
+<Accordion title="Level Evolution">
+Specifies the level and resulting species:
+```asm
+EVOLVE_LEVEL 16, IVYSAUR
+```
+</Accordion>
+
+<Accordion title="Item Evolution">
+Specifies the required evolution stone:
+```asm
+EVOLVE_ITEM FIRE_STONE, ARCANINE
+```
+</Accordion>
+
+<Accordion title="Trade Evolution">
+No additional parameters needed:
+```asm
+EVOLVE_TRADE ALAKAZAM
+```
+</Accordion>
+
+## Move Learning
+
+Pokémon can learn moves two ways:
+
+### Level-Up Moves
+
+Defined in the same file as evolution data:
+
+```asm
+db 7, LEECH_SEED
+db 13, VINE_WHIP
+db 22, POISONPOWDER
+db 30, RAZOR_LEAF
+db 0 ; no more level-up moves
+```
+
+### TM/HM Compatibility
+
+Stored as bit flags (7 bytes = 56 bits for 50 TMs + 5 HMs + 1 unused):
+
+```asm
+tmhm SWORDS_DANCE, TOXIC, BODY_SLAM, TAKE_DOWN, DOUBLE_EDGE, \
+     RAGE, MEGA_DRAIN, SOLARBEAM, MIMIC, DOUBLE_TEAM, \
+     REFLECT, BIDE, REST, SUBSTITUTE, CUT
+```
+
+<Info>
+The `tmhm` macro automatically sets the appropriate bit flags. Each TM/HM has a `_TMNUM` constant that determines its bit position.
+</Info>
+
+## Party Limits
+
+```asm
+DEF PARTY_LENGTH EQU 6
+DEF MONS_PER_BOX EQU 20
+DEF NUM_BOXES    EQU 12
+```
+
+- Maximum 6 Pokémon in party
+- 20 Pokémon per PC box
+- 12 boxes total = 240 storage slots
+- 246 Pokémon maximum (6 + 240)
+
+## Special Pokémon
+
+Certain Pokémon have special handling:
+
+### Ghost Marowak
+
+```asm
+DEF RESTLESS_SOUL EQU MAROWAK
+```
+
+The ghost in Pokémon Tower uses Marowak's data but cannot be caught.
+
+### Fossil Forms
+
+```asm
+const FOSSIL_KABUTOPS    ; $B6
+const FOSSIL_AERODACTYL  ; $B7
+```
+
+Fossil sprites shown at the museum before revival.
+
+### Generic Ghost
+
+```asm
+const MON_GHOST  ; $B8
+```
+
+The unidentified ghost sprite before obtaining the Silph Scope.
+
+## PP System
+
+Power Points are stored with PP Up usage:
+
+```asm
+DEF PP_UP_MASK EQU %11000000 ; number of PP Ups used
+DEF PP_MASK    EQU %00111111 ; currently remaining PP
+```
+
+- Bits 0-5: Current PP remaining (0-63)
+- Bits 6-7: Number of PP Ups used (0-3)
+
+Each PP Up increases max PP by 20% of the base value, up to 3 times.
+
+## Wild Pokémon Data
+
+```asm
+DEF NUM_WILDMONS EQU 10
+DEF WILDDATA_LENGTH EQU 1 + NUM_WILDMONS * 2
+```
+
+Each map can have up to 10 different wild Pokémon (grass/water), stored as level-species pairs.
+
+<CardGroup cols={2}>
+  <Card title="Battle Stats" icon="chart-bar" href="/game-systems/battle-engine">
+    How stats work in battle
+  </Card>
+  <Card title="Items" icon="flask" href="/game-systems/items">
+    Items that affect Pokémon
+  </Card>
+  <Card title="Reference" icon="book" href="/reference/constants">
+    Pokémon constants and data
+  </Card>
+  <Card title="Data Structures" icon="database" href="/reference/data-structures">
+    Pokémon memory layouts
+  </Card>
+</CardGroup>
+
+## Key Files
+
+- `constants/pokemon_constants.asm` - Pokémon IDs
+- `constants/pokemon_data_constants.asm` - Data structure definitions
+- `data/pokemon/base_stats/*.asm` - Individual Pokémon base stats
+- `data/pokemon/evos_moves.asm` - Evolution and level-up moves
+- `data/pokemon/names.asm` - Pokémon name strings
+- `data/pokemon/cries.asm` - Cry audio data
+- `engine/pokemon/` - Pokémon-related engine code

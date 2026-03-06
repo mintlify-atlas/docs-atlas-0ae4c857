@@ -1,0 +1,309 @@
+---
+title: "Overworld System"
+description: "Player movement, sprite rendering, collision detection, and map navigation"
+---
+
+The overworld system manages everything that happens outside of battles: player movement, NPC sprites, collision detection, and map transitions.
+
+## Player Movement
+
+Player movement is handled by `engine/overworld/movement.asm` and processes sprite updates every frame.
+
+### Update Cycle
+
+The `UpdatePlayerSprite` function is the core of overworld rendering:
+
+```asm
+UpdatePlayerSprite:
+    ld a, [wSpritePlayerStateData2WalkAnimationCounter]
+    and a
+    jr z, .checkIfTextBoxInFrontOfSprite
+    cp $ff
+    jr z, .disableSprite
+    dec a
+    ld [wSpritePlayerStateData2WalkAnimationCounter], a
+    jr .disableSprite
+```
+
+<Steps>
+  <Step title="Animation Counter Check">
+    First checks if a walk animation is in progress by examining the animation counter.
+  </Step>
+  
+  <Step title="Tile Detection">
+    Checks what tile the player is standing on to determine if a text box or menu is blocking the sprite.
+  </Step>
+  
+  <Step title="Direction Processing">
+    Determines which direction the player is facing and updates the sprite accordingly.
+  </Step>
+  
+  <Step title="Collision Detection">
+    Calls `DetectCollisionBetweenSprites` to check for interactions with NPCs and objects.
+  </Step>
+</Steps>
+
+## Direction System
+
+The game uses bit flags to track player direction:
+
+<CodeGroup>
+```asm Direction Bits
+bit PLAYER_DIR_BIT_DOWN, a
+bit PLAYER_DIR_BIT_UP, a
+bit PLAYER_DIR_BIT_LEFT, a
+bit PLAYER_DIR_BIT_RIGHT, a
+```
+
+```asm Sprite Facing Constants
+SPRITE_FACING_DOWN  EQU 0
+SPRITE_FACING_UP    EQU 1
+SPRITE_FACING_LEFT  EQU 2
+SPRITE_FACING_RIGHT EQU 3
+```
+</CodeGroup>
+
+### Movement State Machine
+
+```asm
+.moving
+    ld a, [wMovementFlags]
+    bit BIT_SPINNING, a
+    jr nz, .skipSpriteAnim
+    ldh a, [hCurrentSpriteOffset]
+    add $7
+    ld l, a
+    ld a, [hl]
+    inc a
+    ld [hl], a
+    cp 4
+    jr nz, .calcImageIndex
+    xor a
+    ld [hl], a
+    inc hl
+    ld a, [hl]
+    inc a
+    and $3
+    ld [hl], a
+```
+
+<Info>
+The walk animation cycles through 4 frames (0-3) for smooth movement. Each frame is held for multiple update cycles based on the intra-frame counter.
+</Info>
+
+## Tile Interaction
+
+The game distinguishes between map tiles and UI elements:
+
+```asm
+DEF MAP_TILESET_SIZE EQU $60
+
+.checkIfTextBoxInFrontOfSprite
+    lda_coord 8, 9
+    ldh [hTilePlayerStandingOn], a
+    cp MAP_TILESET_SIZE
+    jr c, .lowerLeftTileIsMapTile
+.disableSprite
+    ld a, $ff
+    ld [wSpritePlayerStateData1ImageIndex], a
+    ret
+```
+
+<Note>
+Tile IDs below `$60` (96) are map tiles. Higher IDs represent text boxes and menus, which hide the player sprite when active.
+</Note>
+
+## Grass Priority
+
+A special rendering trick makes the player appear to walk through tall grass:
+
+```asm
+; If the player is standing on a grass tile, make the player's sprite have
+; lower priority than the background so that it's partially obscured by the
+; grass. Only the lower half of the sprite is permitted to have the priority
+; bit set by later logic.
+ldh a, [hTilePlayerStandingOn]
+ld c, a
+ld a, [wGrassTile]
+cp c
+ld a, 0
+jr nz, .next2
+ld a, OAM_PRIO
+.next2
+ld [wSpritePlayerStateData2GrassPriority], a
+```
+
+<Tip>
+The `OAM_PRIO` flag tells the Game Boy's graphics hardware to render the sprite behind the background layer, creating the illusion of walking through grass rather than on top of it.
+</Tip>
+
+## Sprite Animation
+
+Sprites use two counters for smooth animation:
+
+- **Intra-frame counter** (`wSpritePlayerStateData1IntraAnimFrameCounter`): Counts up to 4 before advancing the frame
+- **Animation frame counter** (`wSpritePlayerStateData1AnimFrameCounter`): Current animation frame (0-3)
+
+```asm
+.calcImageIndex
+    ld a, [wSpritePlayerStateData1AnimFrameCounter]
+    ld b, a
+    ld a, [wSpritePlayerStateData1FacingDirection]
+    add b
+    ld [wSpritePlayerStateData1ImageIndex], a
+```
+
+The final image index combines direction and animation frame to select the correct sprite from the sprite sheet.
+
+## Map Structure
+
+Maps are defined with dimensions and unique IDs in `constants/map_constants.asm`:
+
+<CodeGroup>
+```asm Towns and Cities
+const_def
+map_const PALLET_TOWN,      10,  9  ; $00
+map_const VIRIDIAN_CITY,    20, 18  ; $01
+map_const PEWTER_CITY,      20, 18  ; $02
+map_const CERULEAN_CITY,    20, 18  ; $03
+map_const LAVENDER_TOWN,    10,  9  ; $04
+map_const VERMILION_CITY,   20, 18  ; $05
+map_const CELADON_CITY,     25, 18  ; $06
+map_const FUCHSIA_CITY,     20, 18  ; $07
+map_const CINNABAR_ISLAND,  10,  9  ; $08
+map_const INDIGO_PLATEAU,   10,  9  ; $09
+map_const SAFFRON_CITY,     20, 18  ; $0A
+DEF NUM_CITY_MAPS EQU const_value
+```
+
+```asm Routes
+DEF FIRST_ROUTE_MAP EQU const_value
+map_const ROUTE_1,  10, 18  ; $0C
+map_const ROUTE_2,  10, 36  ; $0D
+map_const ROUTE_3,  35,  9  ; $0E
+map_const ROUTE_4,  45,  9  ; $0F
+```
+
+```asm Indoor Maps
+DEF FIRST_INDOOR_MAP EQU const_value
+map_const REDS_HOUSE_1F,  4, 4  ; $25
+map_const REDS_HOUSE_2F,  4, 4  ; $26
+map_const BLUES_HOUSE,    4, 4  ; $27
+map_const OAKS_LAB,       5, 6  ; $28
+```
+</CodeGroup>
+
+<Info>
+Maps are organized by type: cities first, then routes, then indoor locations. Each map definition includes width and height in tiles. The macro automatically generates `MAP_WIDTH` and `MAP_HEIGHT` constants.
+</Info>
+
+## Map Groups
+
+Indoor maps are grouped by their associated outdoor location:
+
+```asm
+end_indoor_group PALLET_TOWN
+end_indoor_group VIRIDIAN_CITY
+end_indoor_group ROUTE_2
+```
+
+This grouping system helps organize the 248 total maps and their associated data:
+
+- Map headers (tiles, connections, objects)
+- Sprite sets
+- Music tracks
+- Wild encounter data
+- Toggleable objects (items, hidden items)
+
+## Collision Detection
+
+The engine performs several types of collision checks:
+
+<Accordion title="Sprite-to-Sprite Collision">
+`DetectCollisionBetweenSprites` checks if the player overlaps with any NPCs or objects to trigger interactions.
+</Accordion>
+
+<Accordion title="Tile Collision">
+Certain tiles (walls, ledges, water) block movement unless the player has the appropriate ability (Surf, etc.).
+</Accordion>
+
+<Accordion title="Map Boundaries">
+Prevents the player from walking off the edge of the map or triggers map transitions when crossing connection points.
+</Accordion>
+
+## Movement Flags
+
+Special movement states are tracked with bit flags:
+
+```asm
+; wMovementFlags
+DEF BIT_SPINNING EQU 0  ; Player is spinning (ledge jump, etc.)
+```
+
+When spinning, sprite animations are paused to maintain visual consistency during special movement sequences.
+
+## Walking Counter
+
+The `wWalkCounter` variable tracks movement progress between tiles:
+
+```asm
+ld a, [wWalkCounter]
+and a
+jr nz, .moving
+```
+
+- Value of 0: Player is standing still
+- Non-zero: Player is mid-transition between tiles
+
+The counter decrements each frame until reaching 0, at which point the player arrives at the destination tile.
+
+## Sprite State Data
+
+Each sprite (including the player) maintains state data in RAM:
+
+- `wSpritePlayerStateData1ImageIndex` - Current sprite frame
+- `wSpritePlayerStateData1FacingDirection` - Direction sprite is facing
+- `wSpritePlayerStateData1IntraAnimFrameCounter` - Sub-frame counter
+- `wSpritePlayerStateData1AnimFrameCounter` - Animation frame (0-3)
+- `wSpritePlayerStateData2GrassPriority` - Priority flag for grass rendering
+- `wSpritePlayerStateData2WalkAnimationCounter` - Walk animation timer
+
+<Warning>
+When the animation counter is `$FF`, the sprite is completely disabled. This happens during menus, battles, and when text boxes cover the sprite area.
+</Warning>
+
+## Font Loading
+
+The system checks if fonts are loaded before allowing movement animations:
+
+```asm
+ld a, [wFontLoaded]
+bit BIT_FONT_LOADED, a
+jr nz, .notMoving
+```
+
+When fonts are loaded (menus, dialogue), movement animations are frozen to prevent visual conflicts.
+
+<CardGroup cols={2}>
+  <Card title="Maps" icon="map" href="/game-systems/maps">
+    Map data and structure
+  </Card>
+  <Card title="Battle Engine" icon="bolt" href="/game-systems/battle-engine">
+    Wild battles and transitions
+  </Card>
+  <Card title="Reference" icon="book" href="/reference/constants">
+    Map and sprite constants
+  </Card>
+  <Card title="Engine Modules" icon="gears" href="/reference/engine-modules">
+    Overworld engine implementation
+  </Card>
+</CardGroup>
+
+## Key Files
+
+- `engine/overworld/movement.asm` - Player sprite and movement
+- `engine/overworld/` - All overworld systems
+- `constants/map_constants.asm` - Map IDs and dimensions
+- `constants/map_object_constants.asm` - Sprite object constants
+- `maps/` - Individual map data files
+- `data/maps/` - Map headers and metadata

@@ -1,80 +1,365 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quick Start
+description: Build your first Pokémon Red and Blue ROMs from source in minutes
 ---
 
-## Get started in three steps
+## Overview
 
-Get your documentation site running locally and make your first customization.
+This guide will walk you through cloning the repository, building ROM files, and verifying your build. The entire process takes just a few minutes once you have [RGBDS installed](/installation).
 
-### Step 1: Set up your local environment
+<Info>
+Make sure you've completed the [Installation](/installation) guide for your platform before continuing.
+</Info>
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
+---
+
+## Building Your First ROMs
+
+<Steps>
+  <Step title="Clone the Repository">
+    Open your terminal and download the source code using Git:
     
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
+    ```bash
+    git clone https://github.com/pret/pokered
+    cd pokered
+    ```
     
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+    This creates a `pokered` directory containing all the source files, including:
+    - Assembly source files (`.asm`)
+    - Graphics data
+    - Maps and scripts
+    - The build system (Makefile)
+  </Step>
 
-### Step 2: Deploy your changes
-
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
+  <Step title="Build the ROMs">
+    From the `pokered` directory, run the build command:
     
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+    ```bash
+    make
+    ```
+    
+    This will:
+    1. Assemble all `.asm` source files into object files
+    2. Convert graphics from PNG to Game Boy format
+    3. Link everything together into ROM files
+    4. Apply ROM fixes and headers
+    
+    The build process typically takes 30-60 seconds on modern hardware. You'll see output showing which files are being processed.
+    
+    <Note>
+    The first build may take longer as it compiles the build tools and processes all graphics files.
+    </Note>
+  </Step>
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+  <Step title="Find Your ROMs">
+    After a successful build, you'll find these files in the project root:
+    
+    - **pokered.gbc** - Pokémon Red ROM
+    - **pokeblue.gbc** - Pokémon Blue ROM
+    - **pokeblue_debug.gbc** - Debug build of Pokémon Blue
+    
+    These are complete, playable Game Boy Color ROMs that you can load in an emulator!
+  </Step>
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+  <Step title="Verify Your Build">
+    To confirm your ROMs match the original games exactly, run:
+    
+    ```bash
+    make compare
+    ```
+    
+    This compares the SHA1 checksums of your built ROMs against the known checksums of the original games. You should see:
+    
+    ```
+    ea9bcae617fdf159b045185467ae58b2e4a48b9a *pokered.gbc
+    d7037c83e1ae5b39bde3c30787637ba1d4c48ce2 *pokeblue.gbc
+    5b1456177671b79b263c614ea0e7cc9ac542e9c4 *pokeblue_debug.gbc
+    ```
+    
+    <Tip>
+    If the checksums match, congratulations! Your build is byte-for-byte identical to the original games. This confirms the disassembly is accurate and your environment is set up correctly.
+    </Tip>
+  </Step>
+</Steps>
 
-### Step 3: Go live
+---
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+## Understanding the Build Targets
 
-## Next steps
+The Makefile supports several build targets for different purposes:
 
-Now that you have your docs running, explore these key features:
+<CodeGroup>
+```bash Build Everything
+make
+# or
+make all
+```
 
-<CardGroup cols={2}>
+```bash Build Red Only
+make red
+```
 
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
+```bash Build Blue Only
+make blue
+```
 
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
+```bash Build Debug Version
+make blue_debug
+```
 
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
+```bash Build Virtual Console Patches
+make red_vc
+make blue_vc
+```
+</CodeGroup>
 
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
+### Build Target Reference
 
-</CardGroup>
+| Target | Output | Description |
+|--------|--------|-------------|
+| `all` | `pokered.gbc`, `pokeblue.gbc`, `pokeblue_debug.gbc` | Builds all ROM files (default) |
+| `red` | `pokered.gbc` | Builds only Pokémon Red |
+| `blue` | `pokeblue.gbc` | Builds only Pokémon Blue |
+| `blue_debug` | `pokeblue_debug.gbc` | Debug build with special features |
+| `compare` | - | Verifies ROM checksums match originals |
+| `clean` | - | Removes all build artifacts including graphics |
+| `tidy` | - | Removes ROMs and object files only |
 
 <Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
+The debug build (`pokeblue_debug.gbc`) includes development features that weren't in the original release. Look for `_DEBUG` conditionals in the source code to see what's different.
 </Note>
+
+---
+
+## What Gets Built?
+
+When you run `make`, several types of files are generated:
+
+### ROM Files
+- **pokered.gbc** - The complete Pokémon Red game
+- **pokeblue.gbc** - The complete Pokémon Blue game  
+- **pokeblue_debug.gbc** - Debug version with extra features
+
+### Symbol Files (.sym)
+Symbol files map memory addresses to function and label names. Useful for debugging in emulators:
+- `pokered.sym`
+- `pokeblue.sym`
+- `pokeblue_debug.sym`
+
+### Map Files (.map)
+Map files show how data is laid out in the ROM:
+- `pokered.map`
+- `pokeblue.map`
+- `pokeblue_debug.map`
+
+### Graphics Files
+Converted graphics in Game Boy format:
+- `.1bpp` - 1 bit per pixel (2 colors)
+- `.2bpp` - 2 bits per pixel (4 colors)
+- `.pic` - Compressed Pokémon sprites
+
+<Tip>
+Symbol files are incredibly useful when debugging or reverse engineering. Load them in emulators like BGB or mGBA to see function names instead of memory addresses.
+</Tip>
+
+---
+
+## Testing Your ROMs
+
+To play your built ROMs, you'll need a Game Boy emulator:
+
+### Recommended Emulators
+
+<CardGroup cols={2}>
+  <Card title="BGB" icon="gamepad">
+    **Best for development/debugging**
+    - Windows (works on Linux via Wine)
+    - Excellent debugger with symbol support
+    - [bgb.bircd.org](https://bgb.bircd.org/)
+  </Card>
+  
+  <Card title="mGBA" icon="gamepad">
+    **Best for casual play**
+    - Cross-platform (Windows, macOS, Linux)
+    - Accurate emulation
+    - [mgba.io](https://mgba.io/)
+  </Card>
+  
+  <Card title="SameBoy" icon="gamepad">
+    **Highly accurate**
+    - Cross-platform
+    - Exceptional accuracy
+    - [sameboy.github.io](https://sameboy.github.io/)
+  </Card>
+  
+  <Card title="Gambatte" icon="gamepad">
+    **Accuracy-focused**
+    - Available as RetroArch core
+    - Very accurate emulation
+    - [github.com/libretro/gambatte-libretro](https://github.com/libretro/gambatte-libretro)
+  </Card>
+</CardGroup>
+
+Simply open `pokered.gbc` or `pokeblue.gbc` in your emulator of choice!
+
+---
+
+## Cleaning Up
+
+To remove build artifacts and start fresh:
+
+<CodeGroup>
+```bash Remove Everything
+make clean
+```
+
+```bash Remove ROMs/Objects Only
+make tidy
+```
+</CodeGroup>
+
+**Difference between `clean` and `tidy`:**
+- `make clean` - Removes ROMs, object files, AND converted graphics (`.1bpp`, `.2bpp`, `.pic`)
+- `make tidy` - Removes only ROMs and object files, keeps converted graphics
+
+<Warning>
+After `make clean`, graphics will need to be regenerated on the next build, which takes longer. Use `make tidy` if you just want to rebuild the ROMs quickly.
+</Warning>
+
+---
+
+## Advanced Build Options
+
+### Using a Local RGBDS Version
+
+If you have RGBDS installed in a local directory:
+
+```bash
+make RGBDS=rgbds-1.0.1/
+```
+
+### Debug Builds with Symbols
+
+To generate extra debugging information:
+
+```bash
+make DEBUG=1
+```
+
+This creates `.sym` and `.map` files even for release builds.
+
+### Building Virtual Console Patches
+
+To create patches for 3DS Virtual Console releases:
+
+```bash
+make red_vc    # Creates pokered.patch
+make blue_vc   # Creates pokeblue.patch
+```
+
+These patches contain the differences needed to run on the 3DS Virtual Console.
+
+---
+
+## What's Inside the ROMs?
+
+Your built ROMs contain everything from the original games:
+
+<CardGroup cols={2}>
+  <Card title="Game Engine" icon="gear">
+    Battle system, overworld movement, menus, events, and all core game logic
+  </Card>
+  
+  <Card title="Pokémon Data" icon="database">
+    All 151 Pokémon with stats, moves, types, and evolution data
+  </Card>
+  
+  <Card title="Maps & Scripts" icon="map">
+    Every town, route, building, and dungeon with NPC dialogue and events
+  </Card>
+  
+  <Card title="Graphics & Audio" icon="image">
+    All sprites, tilesets, animations, music, and sound effects
+  </Card>
+</CardGroup>
+
+The ROM layout is organized into banks (memory sections):
+- **Bank 0 (Home)** - Essential functions always accessible
+- **Banks 1-31** - Switchable banks containing specific features
+- Each bank is 16KB (except Home which is 8KB)
+
+---
+
+## Troubleshooting
+
+### Build Fails with "rgbasm: command not found"
+
+**Solution:** RGBDS isn't installed or not in your PATH. Revisit the [Installation guide](/installation).
+
+### "Error: Unknown symbol" During Assembly
+
+**Solution:** Usually means dependencies aren't up to date. Try:
+```bash
+make clean
+make
+```
+
+### Checksums Don't Match
+
+**Solution:** Could be using wrong RGBDS version or source code modified. Try:
+```bash
+git status          # Check for modified files
+git diff            # See what changed
+rgbasm --version    # Verify RGBDS 1.0.1
+```
+
+### Build is Very Slow
+
+**Solution:** First build is slower due to graphics processing. Subsequent builds are much faster. Use `make tidy` instead of `make clean` to avoid reconverting graphics.
+
+<Tip>
+For more help, ask on [Discord](https://discord.gg/d5dubZ3) in the #pokered channel or check the [GitHub Issues](https://github.com/pret/pokered/issues).
+</Tip>
+
+---
+
+## Next Steps
+
+Now that you have a working build environment, here's what to explore next:
+
+<Steps>
+  <Step title="Explore the Source Code">
+    Open the `.asm` files in a text editor and start reading. Key files to start with:
+    - `main.asm` - Shows the overall code organization
+    - `constants/pokemon_constants.asm` - Pokémon species definitions
+    - `engine/battle/core.asm` - Main battle engine
+    - `data/pokemon/base_stats.asm` - Pokémon stats
+  </Step>
+
+  <Step title="Make a Simple Modification">
+    Try changing something simple like:
+    - Starting money in `engine/movie/oak_speech/init_player_data.asm`
+    - Pokémon stats in `data/pokemon/base_stats.asm`
+    - Starter Pokémon levels
+    
+    Then rebuild with `make` and test your changes!
+  </Step>
+
+  <Step title="Read the Documentation">
+    Check out these resources:
+    - [GitHub Wiki](https://github.com/pret/pokered/wiki) - Comprehensive documentation
+    - [Tutorials](https://github.com/pret/pokered/wiki/Tutorials) - Step-by-step guides
+    - [Game Boy Dev Resources](https://gbdev.io/) - Learn Game Boy programming
+  </Step>
+
+  <Step title="Join the Community">
+    Connect with other ROM hackers and developers:
+    - [Discord](https://discord.gg/d5dubZ3) - #pokered channel
+    - [GitHub Discussions](https://github.com/pret/pokered/discussions)
+    - Share your modifications and learn from others!
+  </Step>
+</Steps>
+
+<Card title="GitHub Wiki Tutorials" icon="book-open" href="https://github.com/pret/pokered/wiki/Tutorials">
+  Browse community-created tutorials for adding features, creating new content, and understanding the codebase
+</Card>

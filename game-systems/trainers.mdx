@@ -1,0 +1,350 @@
+---
+title: "Trainer System"
+description: "Trainer classes, parties, AI behavior, and battle structure"
+---
+
+The trainer system manages all NPC trainers, their Pokémon teams, AI strategies, and prize money calculations.
+
+## Trainer Classes
+
+All trainer classes are defined in `constants/trainer_constants.asm`:
+
+<CodeGroup>
+```asm Regular Trainers
+const_def
+trainer_const NOBODY         ; $00
+trainer_const YOUNGSTER      ; $01
+trainer_const BUG_CATCHER    ; $02
+trainer_const LASS           ; $03
+trainer_const SAILOR         ; $04
+trainer_const JR_TRAINER_M   ; $05
+trainer_const JR_TRAINER_F   ; $06
+trainer_const POKEMANIAC     ; $07
+trainer_const SUPER_NERD     ; $08
+trainer_const HIKER          ; $09
+trainer_const BIKER          ; $0A
+```
+
+```asm Gym Leaders
+trainer_const BROCK          ; $22
+trainer_const MISTY          ; $23
+trainer_const LT_SURGE       ; $24
+trainer_const ERIKA          ; $25
+trainer_const KOGA           ; $26
+trainer_const BLAINE         ; $27
+trainer_const SABRINA        ; $28
+```
+
+```asm Elite Four
+trainer_const LORELEI        ; $2C
+trainer_const BRUNO          ; $21
+trainer_const AGATHA         ; $2E
+trainer_const LANCE          ; $2F
+```
+
+```asm Special Trainers
+trainer_const RIVAL1         ; $19
+trainer_const RIVAL2         ; $2A
+trainer_const RIVAL3         ; $2B
+trainer_const PROF_OAK       ; $1A
+trainer_const GIOVANNI       ; $1D
+```
+</CodeGroup>
+
+<Info>
+There are 48 trainer classes (`NUM_TRAINERS = 47`, excluding NOBODY). The `trainer_const` macro automatically generates both the class ID and an opponent ID offset of 200.
+</Info>
+
+## Trainer Constant Macro
+
+The macro creates two constants per trainer:
+
+```asm
+MACRO trainer_const
+    const \1
+    DEF OPP_\1 EQU OPP_ID_OFFSET + \1
+ENDM
+
+DEF OPP_ID_OFFSET EQU 200
+```
+
+Example: `YOUNGSTER` becomes:
+- `YOUNGSTER = $01` (trainer class)
+- `OPP_YOUNGSTER = 201` (opponent ID for battle system)
+
+## Trainer Data Structure
+
+Trainer parties are defined in `data/trainers/parties.asm` with two formats:
+
+### Format 1: Same Level
+
+All Pokémon at the same level:
+
+```asm
+; if first byte != $FF, then
+;   first byte is level (of all pokemon on this team)
+;   all the next bytes are pokemon species
+;   null-terminated
+```
+
+<CodeGroup>
+```asm Example: Youngster
+YoungsterData:
+; Route 3
+    db 11, RATTATA, EKANS, 0
+    db 14, SPEAROW, 0
+; Mt. Moon 1F
+    db 10, RATTATA, RATTATA, ZUBAT, 0
+; Route 24
+    db 14, RATTATA, EKANS, ZUBAT, 0
+```
+</CodeGroup>
+
+### Format 2: Custom Levels
+
+Each Pokémon has individual level:
+
+```asm
+; if first byte == $FF, then
+;   first byte is $FF (obviously)
+;   every next two bytes are a level and species
+;   null-terminated
+```
+
+<CodeGroup>
+```asm Example: Brock (Gym Leader)
+BrockData:
+    db $FF, 12, GEODUDE, 14, ONIX, 0
+```
+
+```asm Example: Lance (Elite Four)
+LanceData:
+    db $FF, 58, GYARADOS, 56, DRAGONAIR, 56, DRAGONAIR, 60, AERODACTYL, 62, DRAGONITE, 0
+```
+</CodeGroup>
+
+<Note>
+Format 2 (starting with `$FF`) is typically used for Gym Leaders, Elite Four, and your Rival, where Pokémon have carefully balanced levels.
+</Note>
+
+## Trainer Data Pointers
+
+Each trainer class has a pointer to its party data:
+
+```asm
+TrainerDataPointers:
+    table_width 2
+    dw YoungsterData
+    dw BugCatcherData
+    dw LassData
+    dw SailorData
+    dw JrTrainerMData
+    dw JrTrainerFData
+    dw PokemaniacData
+    dw SuperNerdData
+    dw HikerData
+    ; ... more classes ...
+    dw LanceData
+    assert_table_length NUM_TRAINERS
+```
+
+<Steps>
+  <Step title="Class ID Lookup">
+    Game uses trainer class ID to index into `TrainerDataPointers`.
+  </Step>
+  
+  <Step title="Party Selection">
+    Within each class's data, the game selects the specific trainer by index (e.g., "Youngster #3").
+  </Step>
+  
+  <Step title="Party Loading">
+    Parses the party data format and loads Pokémon into battle.
+  </Step>
+</Steps>
+
+## Trainer Names
+
+Trainer names are stored in `data/trainers/names.asm` as null-terminated strings.
+
+Each class gets:
+- A class name ("YOUNGSTER", "LASS", etc.)
+- Optional individual names for important trainers
+
+<Info>
+Most regular trainers share a class name. Only significant trainers (Gym Leaders, Elite Four, Rival) have unique names.
+</Info>
+
+## Prize Money
+
+Prize money calculation uses base values from `data/trainers/pic_pointers_money.asm`:
+
+```asm
+TrainerPicAndMoneyPointers:
+    ; Format: trainer pic, base money
+    dw YoungsterPic,    $0F  ; YOUNGSTER
+    dw BugCatcherPic,   $0A  ; BUG_CATCHER
+    dw LassPic,         $0F  ; LASS
+    ; ... more trainers ...
+```
+
+Prize money formula:
+```
+Prize Money = Base Value × Highest Pokémon Level
+```
+
+<Tip>
+Elite Four members and Gym Leaders have higher base values, resulting in larger payouts even though the formula is the same.
+</Tip>
+
+## Trainer AI System
+
+AI behavior is controlled by `engine/battle/trainer_ai.asm` with class-specific modifications.
+
+### AI Pointers
+
+```asm
+TrainerAIPointers:
+    dw AI_Youngster    ; YOUNGSTER
+    dw AI_BugCatcher   ; BUG_CATCHER
+    dw AI_Lass         ; LASS
+    ; ... more classes ...
+```
+
+Each AI routine can:
+- Evaluate type matchups
+- Prefer status moves in certain situations
+- Switch Pokémon strategically
+- Use healing items (some trainers only)
+
+### Move Choice Modifications
+
+From `data/trainers/move_choices.asm`:
+
+```asm
+TrainerClassMoveChoiceModifications:
+    ; Bit flags for AI behavior
+    db 0             ; YOUNGSTER (no special AI)
+    db 1 | 2         ; BUG_CATCHER (prefers super effective)
+    db 0             ; LASS
+    db 1 | 2 | 4     ; SAILOR (advanced AI)
+```
+
+<Accordion title="AI Flag Meanings">
+- **Bit 0 (1)**: Prefer moves that are super effective
+- **Bit 1 (2)**: Avoid moves that are not very effective
+- **Bit 2 (4)**: Prefer status moves when appropriate
+- **Bit 3 (8)**: Prefer moves with high power
+</Accordion>
+
+<Warning>
+Not all trainer classes have sophisticated AI. Early-game trainers (Youngster, Lass) have minimal AI, while late-game trainers use multiple AI flags.
+</Warning>
+
+## Trainer DVs
+
+From `constants/battle_constants.asm`, trainer Pokémon use fixed DVs:
+
+```asm
+DEF ATKDEFDV_TRAINER EQU $98
+DEF SPDSPCDV_TRAINER EQU $88
+```
+
+These values translate to:
+- Attack DV: 9
+- Defense DV: 8
+- Speed DV: 8
+- Special DV: 8
+- HP DV: 8 (calculated from other DVs)
+
+<Info>
+Trainer Pokémon have slightly above-average DVs (8-9 out of 15), making them stronger than typical wild Pokémon but not perfect.
+</Info>
+
+## Rival Battles
+
+The Rival is special, with three separate class IDs for different points in the game:
+
+<CodeGroup>
+```asm Rival Progression
+trainer_const RIVAL1         ; $19 - Early game
+trainer_const RIVAL2         ; $2A - Mid game
+trainer_const RIVAL3         ; $2B - Late game & Champion
+```
+</CodeGroup>
+
+Each class has different party configurations depending on:
+- Which starter the player chose
+- Current point in the story
+- Location of the battle
+
+### Rival Party Structure
+
+The Rival's team adapts based on the player's starter:
+
+- If player chose **Bulbasaur**, Rival has **Charmander**
+- If player chose **Charmander**, Rival has **Squirtle**
+- If player chose **Squirtle**, Rival has **Bulbasaur**
+
+## Special Trainers
+
+### Professor Oak
+
+```asm
+trainer_const PROF_OAK       ; $1A
+```
+
+Has party data defined but is never fought in normal gameplay. His team exists in the code for debug/testing purposes.
+
+### Giovanni
+
+```asm
+trainer_const GIOVANNI       ; $1D
+```
+
+Battled multiple times with progressively stronger teams:
+- Team Rocket Hideout
+- Silph Co.
+- Viridian Gym (final battle)
+
+### Team Rocket Grunts
+
+```asm
+trainer_const ROCKET         ; $1E
+```
+
+The most common enemy class, with numerous generic grunts throughout the game.
+
+## Trainer Encounter Flags
+
+Each trainer has a unique event flag that tracks whether they've been defeated. This prevents re-battling and is used to give rewards.
+
+When a trainer is defeated:
+1. Their event flag is set
+2. Prize money is awarded
+3. Their dialogue changes to post-battle text
+4. They no longer trigger battles when approached
+
+<CardGroup cols={2}>
+  <Card title="Battle Engine" icon="bolt" href="/game-systems/battle-engine">
+    How trainer battles work
+  </Card>
+  <Card title="Pokémon" icon="dragon" href="/game-systems/pokemon">
+    Trainer Pokémon stats
+  </Card>
+  <Card title="Reference" icon="book" href="/reference/constants">
+    Trainer constants
+  </Card>
+  <Card title="Data Structures" icon="database" href="/reference/data-structures">
+    Trainer party formats
+  </Card>
+</CardGroup>
+
+## Key Files
+
+- `constants/trainer_constants.asm` - Trainer class IDs
+- `data/trainers/parties.asm` - All trainer party data
+- `data/trainers/names.asm` - Trainer class names
+- `data/trainers/pic_pointers_money.asm` - Sprites and prize money
+- `data/trainers/ai_pointers.asm` - AI routine pointers
+- `data/trainers/move_choices.asm` - AI behavior flags
+- `engine/battle/trainer_ai.asm` - AI implementation

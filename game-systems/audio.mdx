@@ -1,0 +1,460 @@
+---
+title: "Audio System"
+description: "Music engine, sound effects, and Game Boy audio hardware programming"
+---
+
+The audio system manages music and sound effects using the Game Boy's four hardware audio channels through a sophisticated software-based music engine.
+
+## Audio Channels
+
+The Game Boy has 4 hardware audio channels defined in `constants/audio_constants.asm`:
+
+<CodeGroup>
+```asm Music Channels
+const_def
+const CHAN1 ; 0 - Square wave with sweep
+const CHAN2 ; 1 - Square wave
+const CHAN3 ; 2 - Wave channel (custom waveforms)
+const CHAN4 ; 3 - Noise channel
+DEF NUM_MUSIC_CHANS EQU const_value
+```
+
+```asm SFX Channels
+const CHAN5 ; 4 - Sound effects (overlays CHAN1)
+const CHAN6 ; 5 - Sound effects (overlays CHAN2)
+const CHAN7 ; 6 - Sound effects (overlays CHAN3)
+const CHAN8 ; 7 - Sound effects (overlays CHAN4)
+DEF NUM_NOISE_CHANS EQU const_value - NUM_MUSIC_CHANS
+DEF NUM_CHANNELS EQU const_value
+```
+</CodeGroup>
+
+<Info>
+The game uses 8 logical channels: 4 for music and 4 for sound effects. SFX channels temporarily override music channels when sound effects play.
+</Info>
+
+## Hardware Channel Properties
+
+### Channel Base Addresses
+
+```asm
+DEF HW_CH1_BASE EQU LOW(rAUD1SWEEP)
+DEF HW_CH2_BASE EQU LOW(rAUD2LEN) - 1
+DEF HW_CH3_BASE EQU LOW(rAUD3ENA)
+DEF HW_CH4_BASE EQU LOW(rAUD4LEN) - 1
+```
+
+These map to Game Boy hardware registers:
+- **Channel 1**: Square wave with frequency sweep capability
+- **Channel 2**: Square wave (no sweep)
+- **Channel 3**: Wave channel (custom 32-sample waveforms)
+- **Channel 4**: White noise generator
+
+### Channel Enable Masks
+
+<CodeGroup>
+```asm Enable Masks
+DEF HW_CH1_ENABLE_MASK EQU %00010001
+DEF HW_CH2_ENABLE_MASK EQU %00100010
+DEF HW_CH3_ENABLE_MASK EQU %01000100
+DEF HW_CH4_ENABLE_MASK EQU %10001000
+```
+
+```asm Disable Masks
+DEF HW_CH1_DISABLE_MASK EQU (~HW_CH1_ENABLE_MASK & $ff)
+DEF HW_CH2_DISABLE_MASK EQU (~HW_CH2_ENABLE_MASK & $ff)
+DEF HW_CH3_DISABLE_MASK EQU (~HW_CH3_ENABLE_MASK & $ff)
+DEF HW_CH4_DISABLE_MASK EQU (~HW_CH4_DISABLE_MASK & $ff)
+```
+</CodeGroup>
+
+<Note>
+These masks control both the left and right audio outputs independently, allowing stereo panning effects.
+</Note>
+
+## Music Engine
+
+The game uses three separate but identical audio engines in `audio/engine_[1|2|3].asm` stored in different ROM banks.
+
+### Update Loop
+
+From `audio/engine_1.asm`:
+
+```asm
+Audio1_UpdateMusic::
+    ld c, CHAN1
+.loop
+    ld b, 0
+    ld hl, wChannelSoundIDs
+    add hl, bc
+    ld a, [hl]
+    and a
+    jr z, .nextChannel
+    ld a, c
+    cp CHAN5
+    jr nc, .applyAffects ; if sfx channel
+    ld a, [wMuteAudioAndPauseMusic]
+    and a
+    jr z, .applyAffects
+    bit BIT_MUTE_AUDIO, a
+    jr nz, .nextChannel
+    ; ... mute audio logic ...
+.applyAffects
+    call Audio1_ApplyMusicAffects
+.nextChannel
+    ld a, c
+    inc c ; inc channel number
+    cp CHAN8
+    jr nz, .loop
+    ret
+```
+
+<Steps>
+  <Step title="Channel Iteration">
+    Loops through all 8 channels (CHAN1-CHAN8) each frame.
+  </Step>
+  
+  <Step title="Active Check">
+    Checks if channel has an active sound or music playing.
+  </Step>
+  
+  <Step title="Mute Handling">
+    If audio is muted, disables music channels but allows SFX.
+  </Step>
+  
+  <Step title="Apply Effects">
+    Calls `ApplyMusicAffects` to process note delays, vibrato, pitch slides, etc.
+  </Step>
+</Steps>
+
+## Music Effects
+
+The engine supports sophisticated musical effects:
+
+### Note Delay Counter
+
+```asm
+ld hl, wChannelNoteDelayCounters
+add hl, bc
+ld a, [hl]
+cp 1
+jp z, Audio1_PlayNextNote
+dec a
+ld [hl], a
+```
+
+Each channel has a counter that decrements each frame. When it reaches 1, the next note plays.
+
+### Vibrato
+
+```asm
+.checkForVibrato
+    ld hl, wChannelVibratoExtents
+    add hl, bc
+    ld a, [hl]
+    and a
+    jr nz, .vibrato
+    ret ; no vibrato
+.vibrato
+    ld d, a
+    ld hl, wChannelVibratoRates
+    add hl, bc
+    ld a, [hl]
+    and $f
+```
+
+Vibrato oscillates the pitch above and below the base frequency for a richer sound.
+
+### Pitch Slide
+
+```asm
+.checkForPitchSlide
+    ld hl, wChannelFlags1
+    add hl, bc
+    bit BIT_PITCH_SLIDE_ON, [hl]
+    jr z, .checkVibratoDelay
+    jp Audio1_ApplyPitchSlide
+```
+
+Smooth pitch bends between notes, used for effects like portamento.
+
+### Duty Cycle Rotation
+
+```asm
+bit BIT_ROTATE_DUTY_CYCLE, [hl]
+jr z, .checkForExecuteMusic
+call Audio1_ApplyDutyCyclePattern
+```
+
+Changes the waveform shape on square wave channels for timbral variation.
+
+## Channel Flags
+
+Two flag bytes control channel behavior:
+
+### Channel Flags 1
+
+```asm
+const_def
+const BIT_PERFECT_PITCH          ; 0
+const BIT_SOUND_CALL             ; 1 - if in sound call
+const BIT_NOISE_OR_SFX           ; 2 - if noise or SFX channel
+const BIT_VIBRATO_DIRECTION      ; 3 - pitch above/below normal
+const BIT_PITCH_SLIDE_ON         ; 4
+const BIT_PITCH_SLIDE_DECREASING ; 5
+const BIT_ROTATE_DUTY_CYCLE      ; 6
+```
+
+### Channel Flags 2
+
+```asm
+DEF BIT_EXECUTE_MUSIC EQU 0 ; if in execute music
+```
+
+<Tip>
+These flags allow each channel to have independent effects like vibrato or pitch slides, enabling rich polyphonic music.
+</Tip>
+
+## Musical Notes
+
+Twelve pitches per octave:
+
+```asm
+const_def
+const C_  ; 0
+const C#  ; 1
+const D_  ; 2
+const D#  ; 3
+const E_  ; 4
+const F_  ; 5
+const F#  ; 6
+const G_  ; 7
+const G#  ; 8
+const A_  ; 9
+const A#  ; A
+const B_  ; B
+DEF NUM_NOTES EQU const_value
+```
+
+Pitch tables in `audio/notes.asm` convert note IDs to hardware frequency values.
+
+## Sound Effects
+
+Sound effects are organized in `audio.asm`:
+
+```asm
+SECTION "Sound Effect Headers 1", ROMX
+INCLUDE "audio/headers/sfxheaders1.asm"
+
+SECTION "Sound Effect Headers 2", ROMX
+INCLUDE "audio/headers/sfxheaders2.asm"
+
+SECTION "Sound Effect Headers 3", ROMX
+INCLUDE "audio/headers/sfxheaders3.asm"
+```
+
+### SFX Categories
+
+From `audio.asm`:
+
+<Accordion title="UI Sounds">
+```asm
+INCLUDE "audio/sfx/start_menu_1.asm"
+INCLUDE "audio/sfx/purchase_1.asm"
+INCLUDE "audio/sfx/press_ab_1.asm"
+INCLUDE "audio/sfx/save_1.asm"
+```
+</Accordion>
+
+<Accordion title="Movement Sounds">
+```asm
+INCLUDE "audio/sfx/collision_1.asm"
+INCLUDE "audio/sfx/ledge_1.asm"
+INCLUDE "audio/sfx/push_boulder_1.asm"
+```
+</Accordion>
+
+<Accordion title="Field Moves">
+```asm
+INCLUDE "audio/sfx/cut_1.asm"
+INCLUDE "audio/sfx/fly_1.asm"
+INCLUDE "audio/sfx/teleport_exit1_1.asm"
+```
+</Accordion>
+
+<Accordion title="Pokémon Centers">
+```asm
+INCLUDE "audio/sfx/healing_machine_1.asm"
+INCLUDE "audio/sfx/heal_hp_1.asm"
+INCLUDE "audio/sfx/heal_ailment_1.asm"
+```
+</Accordion>
+
+<Accordion title="PC Sounds">
+```asm
+INCLUDE "audio/sfx/turn_on_pc_1.asm"
+INCLUDE "audio/sfx/turn_off_pc_1.asm"
+INCLUDE "audio/sfx/enter_pc_1.asm"
+```
+</Accordion>
+
+## Pokémon Cries
+
+Pokémon cries are special sound effects:
+
+```asm
+INCLUDE "audio/sfx/cry00_1.asm"
+INCLUDE "audio/sfx/cry01_1.asm"
+INCLUDE "audio/sfx/cry02_1.asm"
+; ... cry03 through cry25 ...
+```
+
+Each cry is synthesized in real-time by modulating Channel 3's waveform based on parameters stored in `data/pokemon/cries.asm`.
+
+<Info>
+Pokémon cries are not pre-recorded samples. They're generated by the audio engine using base waveforms and pitch/length parameters, saving significant ROM space.
+</Info>
+
+## Wave Patterns
+
+Channel 3 uses custom 32-sample waveforms:
+
+```asm
+Audio1_WavePointers:
+INCLUDE "audio/wave_samples.asm"
+```
+
+The wave channel can load different waveforms for varied timbres, from smooth sine waves to harsh sawtooths.
+
+## Music Headers
+
+Music tracks are organized with headers:
+
+```asm
+SECTION "Music Headers 1", ROMX
+INCLUDE "audio/headers/musicheaders1.asm"
+
+SECTION "Music Headers 2", ROMX
+INCLUDE "audio/headers/musicheaders2.asm"
+
+SECTION "Music Headers 3", ROMX
+INCLUDE "audio/headers/musicheaders3.asm"
+```
+
+Each header points to channel data for a music track, specifying which channels are used and where their note sequences are stored.
+
+## Music Tracks
+
+Some notable tracks:
+
+<CodeGroup>
+```asm Town Themes
+INCLUDE "audio/music/celadon.asm"
+INCLUDE "audio/music/cinnabar.asm"
+INCLUDE "audio/music/cities1.asm"
+INCLUDE "audio/music/cities2.asm"
+```
+
+```asm Battle Music
+INCLUDE "audio/music/finalbattle.asm"
+INCLUDE "audio/music/gymleaderbattle.asm"
+INCLUDE "audio/music/defeatedtrainer.asm"
+INCLUDE "audio/music/defeatedwildmon.asm"
+```
+
+```asm Dungeon Themes
+INCLUDE "audio/music/dungeon1.asm"
+INCLUDE "audio/music/dungeon2.asm"
+INCLUDE "audio/music/dungeon3.asm"
+INCLUDE "audio/music/cinnabarmansion.asm"
+```
+</CodeGroup>
+
+## Audio Muting
+
+The game can mute audio selectively:
+
+```asm
+DEF BIT_MUTE_AUDIO EQU 7
+
+; When bit 7 is set in wMuteAudioAndPauseMusic:
+ld a, [wMuteAudioAndPauseMusic]
+bit BIT_MUTE_AUDIO, a
+jr nz, .nextChannel  ; skip music channels
+```
+
+This allows menus and text to mute background music while still playing sound effects.
+
+## Low Health Alarm
+
+A special audio feature:
+
+```asm
+DEF BIT_LOW_HEALTH_ALARM EQU 7
+DEF LOW_HEALTH_TIMER_MASK EQU %01111111
+DEF DISABLE_LOW_HEALTH_ALARM EQU $ff
+```
+
+When a Pokémon's HP drops below 20%, a beeping sound plays periodically to alert the player.
+
+Implementation in `audio/low_health_alarm.asm`.
+
+## Noise Instruments
+
+Channel 4 (noise) has 19 preset instruments:
+
+```asm
+INCLUDE "audio/sfx/noise_instrument01_1.asm"
+INCLUDE "audio/sfx/noise_instrument02_1.asm"
+; ... through noise_instrument19 ...
+```
+
+These provide various percussion and sound effect timbres by configuring the noise channel's frequency and envelope.
+
+## Hardware Registers
+
+The engine directly manipulates Game Boy audio registers:
+
+```asm
+const_def 1
+const REG_DUTY_SOUND_LEN  ; 1
+const REG_VOLUME_ENVELOPE ; 2
+const REG_FREQUENCY_LO    ; 3
+```
+
+Each channel has multiple registers controlling:
+- Duty cycle (square wave shape)
+- Sound length
+- Volume envelope (fade in/out)
+- Frequency (pitch)
+
+<Warning>
+Direct hardware access requires careful timing. Writing to audio registers at the wrong time can cause audio glitches or crashes.
+</Warning>
+
+<CardGroup cols={2}>
+  <Card title="Maps" icon="map" href="/game-systems/maps">
+    Map music assignments
+  </Card>
+  <Card title="Hardware" icon="microchip" href="/architecture/game-boy-hardware">
+    Game Boy hardware details
+  </Card>
+  <Card title="Reference" icon="book" href="/reference/constants">
+    Audio constants reference
+  </Card>
+  <Card title="Development" icon="code" href="/development/tools">
+    Build tools and audio workflow
+  </Card>
+</CardGroup>
+
+## Key Files
+
+- `audio.asm` - Main audio assembly file
+- `audio/engine_1.asm` - Primary audio engine (duplicated in engines 2 & 3)
+- `constants/audio_constants.asm` - Audio constants
+- `constants/music_constants.asm` - Music track IDs
+- `audio/headers/` - Music and SFX headers
+- `audio/music/` - Music track data
+- `audio/sfx/` - Sound effect data
+- `audio/wave_samples.asm` - Channel 3 waveforms
+- `audio/low_health_alarm.asm` - Low HP warning sound

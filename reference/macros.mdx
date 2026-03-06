@@ -1,0 +1,735 @@
+---
+title: "Macros Reference"
+description: "Complete reference for assembly macros used in the Pokémon Red/Blue disassembly"
+icon: "code"
+---
+
+## Overview
+
+Macros in the Pokémon Red/Blue disassembly provide reusable code patterns that make assembly programming more readable and maintainable. All macro definitions are in `macros/*.asm` files.
+
+Macros expand at assembly time, replacing macro invocations with their defined code sequences. This allows complex operations to be expressed concisely.
+
+## Macro Categories
+
+The disassembly organizes macros into several categories:
+
+- **const.asm** - Constant enumeration macros
+- **farcall.asm** - Bank switching and far call macros
+- **coords.asm** - Screen coordinate calculation macros
+- **data.asm** - Data structure and value macros
+- **ram.asm** - Memory structure definition macros
+- **gfx.asm** - Graphics-related macros
+- **predef.asm** - Predefined function call macros
+
+## Constant Macros
+
+**File:** `macros/const.asm`
+
+<Accordion title="const_def - Initialize Enumeration">
+
+### const_def
+
+Initializes or resets the constant enumeration counter.
+
+**Definition:**
+```asm
+MACRO const_def
+    IF _NARG >= 1
+        DEF const_value = \1
+    ELSE
+        DEF const_value = 0
+    ENDC
+    IF _NARG >= 2
+        DEF const_inc = \2
+    ELSE
+        DEF const_inc = 1
+    ENDC
+ENDM
+```
+
+**Usage:**
+```asm
+; Start at 0, increment by 1
+const_def
+const FIRST   ; 0
+const SECOND  ; 1
+
+; Start at 10, increment by 1
+const_def 10
+const TEN     ; 10
+const ELEVEN  ; 11
+
+; Start at 0, increment by 2
+const_def 0, 2
+const EVEN_0  ; 0
+const EVEN_2  ; 2
+```
+
+</Accordion>
+
+<Accordion title="const - Define Constant">
+
+### const
+
+Defines a constant with the current `const_value` and increments the counter.
+
+**Definition:**
+```asm
+MACRO const
+    DEF \1 EQU const_value
+    DEF const_value += const_inc
+ENDM
+```
+
+**Usage:**
+```asm
+const_def
+const NO_ITEM       ; 0
+const MASTER_BALL   ; 1
+const ULTRA_BALL    ; 2
+```
+
+</Accordion>
+
+<Accordion title="const_skip - Skip Values">
+
+### const_skip
+
+Skips one or more values in the enumeration.
+
+**Definition:**
+```asm
+MACRO const_skip
+    if _NARG >= 1
+        DEF const_value += const_inc * (\1)
+    else
+        DEF const_value += const_inc
+    endc
+ENDM
+```
+
+**Usage:**
+```asm
+const TANGELA       ; $1E
+const_skip          ; Skip $1F
+const_skip          ; Skip $20
+const GROWLITHE     ; $21
+
+const_skip 3        ; Skip 3 values at once
+```
+
+</Accordion>
+
+<Accordion title="const_next - Jump to Value">
+
+### const_next
+
+Jumps the enumeration to a specific value (cannot go backwards).
+
+**Definition:**
+```asm
+MACRO const_next
+    if (const_value > 0 && \1 < const_value) || (const_value < 0 && \1 > const_value)
+        fail "const_next cannot go backwards from {const_value} to \1"
+    else
+        DEF const_value = \1
+    endc
+ENDM
+```
+
+**Usage:**
+```asm
+const FLOOR_B4F     ; $61
+
+const_next $C4
+add_hm CUT          ; $C4
+```
+
+</Accordion>
+
+<Accordion title="shift_const - Bit Flag Constants">
+
+### shift_const
+
+Creates bit flag constants using left shift.
+
+**Definition:**
+```asm
+MACRO shift_const
+    DEF \1 EQU 1 << const_value
+    DEF const_value += const_inc
+ENDM
+```
+
+**Usage:**
+```asm
+const_def
+shift_const BIT_FLAG_0   ; 1 << 0 = $01
+shift_const BIT_FLAG_1   ; 1 << 1 = $02
+shift_const BIT_FLAG_2   ; 1 << 2 = $04
+shift_const BIT_FLAG_3   ; 1 << 3 = $08
+```
+
+</Accordion>
+
+## Far Call Macros
+
+**File:** `macros/farcall.asm`
+
+<Accordion title="farcall - Call Function in Different Bank">
+
+### farcall
+
+Calls a function in a different ROM bank using the bank switching mechanism.
+
+**Definition:**
+```asm
+MACRO farcall
+    ld b, BANK(\1)
+    ld hl, \1
+    call Bankswitch
+ENDM
+```
+
+**Usage:**
+```asm
+; Call a function in another bank
+farcall LoadMonData
+
+; Expands to:
+; ld b, BANK(LoadMonData)
+; ld hl, LoadMonData
+; call Bankswitch
+```
+
+<Info>
+The Game Boy only has 32 KB of addressable ROM space. Bank switching allows access to the full 1 MB ROM by swapping 16 KB banks at $4000-$7FFF.
+</Info>
+
+</Accordion>
+
+<Accordion title="callfar - Alternative Call Order">
+
+### callfar
+
+Identical to `farcall` but loads registers in a different order.
+
+**Definition:**
+```asm
+MACRO callfar
+    ld hl, \1
+    ld b, BANK(\1)
+    call Bankswitch
+ENDM
+```
+
+<Note>
+The difference between `farcall` and `callfar` is purely stylistic - they produce the same result.
+</Note>
+
+</Accordion>
+
+<Accordion title="farjp - Jump to Different Bank">
+
+### farjp
+
+Jumps to a function in a different ROM bank (doesn't return).
+
+**Definition:**
+```asm
+MACRO farjp
+    ld b, BANK(\1)
+    ld hl, \1
+    jp Bankswitch
+ENDM
+```
+
+**Usage:**
+```asm
+; Jump to another bank (tail call)
+farjp DisplayTextBoxID
+```
+
+</Accordion>
+
+<Accordion title="homecall - Call with Bank Restore">
+
+### homecall
+
+Calls a function in a different bank and automatically restores the previous bank.
+
+**Definition:**
+```asm
+MACRO homecall
+    ldh a, [hLoadedROMBank]
+    push af
+    ld a, BANK(\1)
+    ldh [hLoadedROMBank], a
+    ld [rROMB], a
+    call \1
+    pop af
+    ldh [hLoadedROMBank], a
+    ld [rROMB], a
+ENDM
+```
+
+**Usage:**
+```asm
+homecall UpdateSprites
+; Bank is automatically restored after call
+```
+
+</Accordion>
+
+## Coordinate Macros
+
+**File:** `macros/coords.asm`
+
+<Accordion title="coord - Load Screen Coordinate">
+
+### coord / hlcoord / bccoord / decoord
+
+Calculates a screen coordinate address and loads it into a register pair.
+
+**Definition:**
+```asm
+MACRO coord
+    ; register, x, y[, origin]
+    validate_coords \2, \3
+    IF _NARG >= 4
+        ld \1, (\3) * SCREEN_WIDTH + (\2) + \4
+    ELSE
+        ld \1, (\3) * SCREEN_WIDTH + (\2) + wTileMap
+    ENDC
+ENDM
+
+MACRO hlcoord
+    coord hl, \#
+ENDM
+```
+
+**Usage:**
+```asm
+; Load coordinate (5, 10) into HL
+hlcoord 5, 10
+
+; Load into BC
+bccoord 0, 0
+
+; Load into DE
+decoord 10, 5
+
+; Custom origin
+coord hl, 8, 12, wTileMapBackup
+```
+
+**Screen Layout:**
+```
+DEF SCREEN_WIDTH  EQU 20
+DEF SCREEN_HEIGHT EQU 18
+
+Address = y * SCREEN_WIDTH + x + wTileMap
+```
+
+</Accordion>
+
+<Accordion title="dwcoord - Coordinate Data Word">
+
+### dwcoord
+
+Defines a 2-byte coordinate address in data.
+
+**Definition:**
+```asm
+MACRO dwcoord
+    ; x, y
+    validate_coords \1, \2
+    IF _NARG >= 3
+        dw (\2) * SCREEN_WIDTH + (\1) + \3
+    ELSE
+        dw (\2) * SCREEN_WIDTH + (\1) + wTileMap
+    ENDC
+ENDM
+```
+
+**Usage:**
+```asm
+TextBoxCoordinates:
+    dwcoord 0, 14    ; Bottom text box
+    dwcoord 0, 0     ; Top of screen
+```
+
+</Accordion>
+
+<Accordion title="ldcoord_a / lda_coord - Direct Coordinate Access">
+
+### ldcoord_a / lda_coord
+
+Directly reads or writes the accumulator to a screen coordinate.
+
+**Definition:**
+```asm
+MACRO ldcoord_a
+    ; x, y[, origin]
+    validate_coords \1, \2
+    IF _NARG >= 3
+        ld [(\2) * SCREEN_WIDTH + (\1) + \3], a
+    ELSE
+        ld [(\2) * SCREEN_WIDTH + (\1) + wTileMap], a
+    ENDC
+ENDM
+
+MACRO lda_coord
+    ; x, y[, origin]
+    validate_coords \1, \2
+    IF _NARG >= 3
+        ld a, [(\2) * SCREEN_WIDTH + (\1) + \3]
+    ELSE
+        ld a, [(\2) * SCREEN_WIDTH + (\1) + wTileMap]
+    ENDC
+ENDM
+```
+
+**Usage:**
+```asm
+; Write tile to coordinate
+ld a, $7C  ; Tile ID
+ldcoord_a 10, 5
+
+; Read tile from coordinate
+lda_coord 10, 5
+cp $7C
+```
+
+</Accordion>
+
+## Data Macros
+
+**File:** `macros/data.asm`
+
+<Accordion title="dbw / dwb - Mixed Data">
+
+### dbw / dwb
+
+Defines mixed byte and word data.
+
+**Definition:**
+```asm
+MACRO dbw
+    db \1
+    dw \2
+ENDM
+
+MACRO dwb
+    dw \1
+    db \2
+ENDM
+```
+
+**Usage:**
+```asm
+; Byte then word
+dbw $01, $ABCD
+
+; Word then byte
+dwb $1234, $FF
+```
+
+</Accordion>
+
+<Accordion title="dn - Nybbles (4-bit pairs)">
+
+### dn
+
+Packs two 4-bit values into a single byte.
+
+**Definition:**
+```asm
+MACRO dn
+    REPT _NARG / 2
+        db ((\1) << 4) | (\2)
+        SHIFT 2
+    ENDR
+ENDM
+```
+
+**Usage:**
+```asm
+; Pack two 4-bit values
+dn 5, 3  ; $53
+dn 15, 0 ; $F0
+
+; Multiple pairs
+dn 1, 2, 3, 4  ; $12 $34
+```
+
+</Accordion>
+
+<Accordion title="dba / dab - Bank + Address">
+
+### dba / dab
+
+Defines bank and address pairs for far pointers.
+
+**Definition:**
+```asm
+MACRO dba
+    REPT _NARG
+        dbw BANK(\1), \1
+        SHIFT
+    ENDR
+ENDM
+
+MACRO dab
+    REPT _NARG
+        dwb \1, BANK(\1)
+        SHIFT
+    ENDR
+ENDM
+```
+
+**Usage:**
+```asm
+; Bank byte, then address word
+dba LoadMonData
+; Expands to: db BANK(LoadMonData) : dw LoadMonData
+
+; Address word, then bank byte
+dab InitBattleVariables
+```
+
+</Accordion>
+
+<Accordion title="tmhm - TM/HM Learn Flags">
+
+### tmhm
+
+Generates TM/HM compatibility bitfield for Pokémon.
+
+**Definition:**
+```asm
+MACRO tmhm
+    ; Initialize bytes to 0
+    FOR n, (NUM_TM_HM + 7) / 8
+        DEF _tm{d:n} = 0
+    ENDR
+    ; Set bits for each TM/HM
+    REPT _NARG
+        IF DEF(\1_TMNUM)
+            DEF n = (\1_TMNUM - 1) / 8
+            DEF i = (\1_TMNUM - 1) % 8
+            DEF _tm{d:n} |= 1 << i
+        ELSE
+            FAIL "\1 is not a TM or HM move"
+        ENDC
+        SHIFT
+    ENDR
+    ; Output bytes
+    FOR n, (NUM_TM_HM + 7) / 8
+        db _tm{d:n}
+    ENDR
+ENDM
+```
+
+**Usage:**
+```asm
+; In data/pokemon/base_stats/pikachu.asm
+tmhm MEGA_PUNCH, MEGA_KICK, TOXIC, BODY_SLAM, \
+     TAKE_DOWN, DOUBLE_EDGE, PAY_DAY, SUBMISSION, \
+     SEISMIC_TOSS, RAGE, THUNDERBOLT, THUNDER
+```
+
+</Accordion>
+
+<Accordion title="bcd2 / bcd3 - Binary Coded Decimal">
+
+### bcd2 / bcd3
+
+Converts decimal numbers to BCD format.
+
+**Definition:**
+```asm
+MACRO bcd2
+    dn ((\1) / 1000) % 10, ((\1) / 100) % 10
+    dn ((\1) / 10) % 10, (\1) % 10
+ENDM
+
+MACRO bcd3
+    dn ((\1) / 100000) % 10, ((\1) / 10000) % 10
+    dn ((\1) / 1000) % 10, ((\1) / 100) % 10
+    dn ((\1) / 10) % 10, (\1) % 10
+ENDM
+```
+
+**Usage:**
+```asm
+; Used for experience values
+bcd2 1234  ; Encodes as $12 $34
+bcd3 456789 ; Encodes as $45 $67 $89
+```
+
+</Accordion>
+
+## RAM Structure Macros
+
+**File:** `macros/ram.asm`
+
+<Accordion title="box_struct - Box Pokémon Structure">
+
+### box_struct
+
+Defines the memory layout for a Pokémon in a box (without stats).
+
+**Definition:**
+```asm
+MACRO box_struct
+\1Species::    db
+\1HP::         dw
+\1BoxLevel::   db
+\1Status::     db
+\1Type::
+\1Type1::      db
+\1Type2::      db
+\1CatchRate::  db
+\1Moves::      ds NUM_MOVES
+\1OTID::       dw
+\1Exp::        ds 3
+\1HPExp::      dw
+\1AttackExp::  dw
+\1DefenseExp:: dw
+\1SpeedExp::   dw
+\1SpecialExp:: dw
+\1DVs::        dw
+\1PP::         ds NUM_MOVES
+ENDM
+```
+
+**Usage:**
+```asm
+wBoxMon1::
+    box_struct wBoxMon1
+; Creates: wBoxMon1Species, wBoxMon1HP, etc.
+```
+
+</Accordion>
+
+<Accordion title="party_struct - Party Pokémon Structure">
+
+### party_struct
+
+Defines the memory layout for a party Pokémon (includes stats).
+
+**Definition:**
+```asm
+MACRO party_struct
+    box_struct \1
+\1Level::      db
+\1Stats::
+\1MaxHP::      dw
+\1Attack::     dw
+\1Defense::    dw
+\1Speed::      dw
+\1Special::    dw
+ENDM
+```
+
+**Usage:**
+```asm
+wPartyMon1::
+    party_struct wPartyMon1
+; Includes all box_struct fields plus Level and Stats
+```
+
+</Accordion>
+
+<Accordion title="battle_struct - Battle Pokémon Structure">
+
+### battle_struct
+
+Defines the memory layout for a Pokémon in battle.
+
+**Definition:**
+```asm
+MACRO battle_struct
+\1Species::    db
+\1HP::         dw
+\1PartyPos::
+\1BoxLevel::   db
+\1Status::     db
+\1Type::
+\1Type1::      db
+\1Type2::      db
+\1CatchRate::  db
+\1Moves::      ds NUM_MOVES
+\1DVs::        dw
+\1Level::      db
+\1Stats::
+\1MaxHP::      dw
+\1Attack::     dw
+\1Defense::    dw
+\1Speed::      dw
+\1Special::    dw
+\1PP::         ds NUM_MOVES
+ENDM
+```
+
+</Accordion>
+
+<Accordion title="spritestatedata1 / spritestatedata2 - Sprite Structures">
+
+### spritestatedata1 / spritestatedata2
+
+Define sprite state data structures for map sprites.
+
+**Definition:**
+```asm
+MACRO spritestatedata1
+\1PictureID::             db
+\1MovementStatus::        db
+\1ImageIndex::            db
+\1YStepVector::           db
+\1YPixels::               db
+\1XStepVector::           db
+\1XPixels::               db
+\1IntraAnimFrameCounter:: db
+\1AnimFrameCounter::      db
+\1FacingDirection::       db
+\1YAdjusted::             db
+\1XAdjusted::             db
+\1CollisionData::         db
+    ds 3
+\1End::
+ENDM
+```
+
+**Usage:**
+```asm
+wSprite01StateData1::
+    spritestatedata1 wSprite01StateData1
+```
+
+</Accordion>
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Use Meaningful Names" icon="signature">
+    Choose clear macro and parameter names that indicate purpose.
+  </Card>
+  <Card title="Validate Inputs" icon="check">
+    Use assertions in macros to catch errors at assembly time.
+  </Card>
+  <Card title="Document Parameters" icon="book">
+    Comment macro parameters and expected values.
+  </Card>
+  <Card title="Keep Macros Simple" icon="lightbulb">
+    Complex logic belongs in functions, not macros.
+  </Card>
+</CardGroup>
+
+## Related Pages
+
+- [Constants Reference](/reference/constants) - Constant definition system
+- [Data Structures](/reference/data-structures) - Memory layouts using macros
+- [Engine Modules](/reference/engine-modules) - Macros in action

@@ -1,0 +1,501 @@
+---
+title: "Data Structures Reference"
+description: "Memory layouts and data formats used in Pokémon Red/Blue"
+icon: "table"
+---
+
+## Overview
+
+Pokémon Red/Blue uses carefully designed data structures to represent game state in memory. Understanding these structures is essential for modifying Pokémon stats, battle mechanics, and save data.
+
+All data structures are defined using RGBDS `rsreset` and `rb`/`rw` directives or through structure macros in `macros/ram.asm`.
+
+## Pokémon Data Structures
+
+### Base Stats Structure
+
+**File:** `constants/pokemon_data_constants.asm`
+
+Base stats define the inherent properties of each species, stored in `data/pokemon/base_stats/*.asm`.
+
+```asm
+rsreset
+DEF BASE_DEX_NO      rb        ; Pokédex number
+DEF BASE_STATS       rb NUM_STATS
+rsset BASE_STATS
+DEF BASE_HP          rb        ; Base HP
+DEF BASE_ATK         rb        ; Base Attack
+DEF BASE_DEF         rb        ; Base Defense  
+DEF BASE_SPD         rb        ; Base Speed
+DEF BASE_SPC         rb        ; Base Special
+DEF BASE_TYPES       rw
+rsset BASE_TYPES
+DEF BASE_TYPE_1      rb        ; Primary type
+DEF BASE_TYPE_2      rb        ; Secondary type
+DEF BASE_CATCH_RATE  rb        ; Catch rate (0-255)
+DEF BASE_EXP         rb        ; Base experience yield
+DEF BASE_PIC_SIZE    rb        ; Sprite dimensions
+DEF BASE_FRONTPIC    rw        ; Front sprite pointer
+DEF BASE_BACKPIC     rw        ; Back sprite pointer
+DEF BASE_MOVES       rb NUM_MOVES  ; Starting moves
+DEF BASE_GROWTH_RATE rb        ; Experience curve
+DEF BASE_TMHM        rb (NUM_TM_HM + 7) / 8  ; TM/HM compatibility (7 bytes)
+                     rb_skip    ; Padding
+DEF BASE_DATA_SIZE EQU _RS     ; Total size
+```
+
+**Example - Pikachu's Base Stats:**
+
+```asm
+; data/pokemon/base_stats/pikachu.asm
+db DEX_PIKACHU
+db 35, 55, 30, 90, 50  ; HP, Atk, Def, Spd, Spc
+db ELECTRIC, ELECTRIC  ; Types
+db 190                 ; Catch rate
+db 82                  ; Base experience
+SPRITES PIKACHU
+db THUNDERSHOCK, GROWL, 0, 0  ; Level 1 moves
+db GROWTH_MEDIUM_FAST
+tmhm MEGA_PUNCH, MEGA_KICK, TOXIC, BODY_SLAM  ; ... (TM/HM compatibility)
+```
+
+### Party Pokémon Structure
+
+**Size:** 44 bytes (0x2C)
+
+Party Pokémon include current stats for immediate use:
+
+```asm
+rsreset
+DEF MON_SPECIES    rb        ; $00 - Species ID
+DEF MON_HP         rw        ; $01 - Current HP (16-bit)
+DEF MON_BOX_LEVEL  rb        ; $03 - Level (box storage)
+DEF MON_STATUS     rb        ; $04 - Status ailment
+DEF MON_TYPE       rw
+rsset MON_TYPE
+DEF MON_TYPE1      rb        ; $05 - Primary type
+DEF MON_TYPE2      rb        ; $06 - Secondary type  
+DEF MON_CATCH_RATE rb        ; $07 - Catch rate/held item placeholder
+DEF MON_MOVES      rb NUM_MOVES  ; $08-$0B - Four move slots
+DEF MON_OTID       rw        ; $0C - Original Trainer ID
+DEF MON_EXP        rb 3      ; $0E - Experience points (24-bit BCD)
+DEF MON_HP_EXP     rw        ; $11 - HP stat experience
+DEF MON_ATK_EXP    rw        ; $13 - Attack stat experience
+DEF MON_DEF_EXP    rw        ; $15 - Defense stat experience
+DEF MON_SPD_EXP    rw        ; $17 - Speed stat experience
+DEF MON_SPC_EXP    rw        ; $19 - Special stat experience
+DEF MON_DVS        rw        ; $1B - Determinant Values (IVs)
+DEF MON_PP         rb NUM_MOVES  ; $1D-$20 - PP for each move
+DEF BOXMON_STRUCT_LENGTH EQU _RS  ; $21 (33 bytes)
+
+; Party-only fields (not in box storage)
+DEF MON_LEVEL      rb        ; $21 - Current level
+DEF MON_STATS      rw NUM_STATS
+rsset MON_STATS
+DEF MON_MAXHP      rw        ; $22 - Max HP
+DEF MON_ATK        rw        ; $24 - Attack stat
+DEF MON_DEF        rw        ; $26 - Defense stat
+DEF MON_SPD        rw        ; $28 - Speed stat
+DEF MON_SPC        rw        ; $2A - Special stat
+DEF PARTYMON_STRUCT_LENGTH EQU _RS  ; $2C (44 bytes)
+```
+
+<Note>
+**Box Pokémon vs Party Pokémon:**
+- Box Pokémon: 33 bytes (0x21) - compact storage
+- Party Pokémon: 44 bytes (0x2C) - includes calculated stats for battle
+
+When withdrawing from PC, stats are recalculated from DVs and Stat EXP.
+</Note>
+
+### Battle Pokémon Structure
+
+**Size:** 44 bytes (0x2C)
+
+Used for active battle participants (`wBattleMon` and `wEnemyMon`):
+
+```asm
+rsreset
+DEF MON_SPECIES    rb        ; Species ID
+DEF MON_HP         rw        ; Current HP
+DEF MON_PARTY_POS  rb        ; Party position (battle_struct specific)
+rsset MON_PARTY_POS  
+DEF MON_BOX_LEVEL  rb        ; Level
+DEF MON_STATUS     rb        ; Status condition
+DEF MON_TYPE1      rb        ; Primary type
+DEF MON_TYPE2      rb        ; Secondary type
+DEF MON_CATCH_RATE rb        ; Catch rate
+DEF MON_MOVES      rb NUM_MOVES  ; Four moves
+DEF MON_DVS        rw        ; Determinant Values
+DEF MON_LEVEL      rb        ; Current level
+DEF MON_MAXHP      rw        ; Max HP
+DEF MON_ATK        rw        ; Attack
+DEF MON_DEF        rw        ; Defense
+DEF MON_SPD        rw        ; Speed
+DEF MON_SPC        rw        ; Special
+DEF MON_PP         rb NUM_MOVES  ; PP for each move
+```
+
+### Determinant Values (DVs)
+
+DVs are stored as a 16-bit value with 4 bits per stat:
+
+```asm
+DEF MON_DVS        rw        ; 16-bit value
+
+; Bit layout:
+; AAAA BBBB CCCC DDDD
+; A = Attack DV  (0-15)
+; B = Defense DV (0-15)
+; C = Speed DV   (0-15)
+; D = Special DV (0-15)
+
+; HP DV is calculated:
+; HP = (Attack & 1) << 3 | (Defense & 1) << 2 | (Speed & 1) << 1 | (Special & 1)
+```
+
+**Shiny Calculation (Generation II mechanics):**
+
+In Gen I, shininess doesn't exist, but DVs determine it in Gen II when traded:
+
+```
+Shiny if:
+- Defense DV = 10
+- Speed DV = 10  
+- Special DV = 10
+- Attack DV = 2, 3, 6, 7, 10, 11, 14, or 15
+```
+
+## Move Data Structure
+
+**Size:** 6 bytes per move
+
+**File:** `constants/battle_constants.asm`
+
+```asm
+rsreset
+DEF MOVE_ANIM   rb        ; Animation ID
+DEF MOVE_EFFECT rb        ; Effect ID
+DEF MOVE_POWER  rb        ; Base power (0 for status moves)
+DEF MOVE_TYPE   rb        ; Type ID
+DEF MOVE_ACC    rb        ; Accuracy (0-255, 255 = never miss)
+DEF MOVE_PP     rb        ; Base PP
+DEF MOVE_LENGTH EQU _RS   ; 6 bytes total
+```
+
+**Example - Thunder Bolt:**
+
+```asm
+; data/moves/moves.asm
+db THUNDERBOLT_ANIM
+db PARALYZE_SIDE_EFFECT1
+db 95   ; Power
+db ELECTRIC
+db 100  ; 100% accuracy  
+db 15   ; 15 PP
+```
+
+## Map Data Structures
+
+### Map Header Structure
+
+**File:** `data/maps/maps.asm`
+
+Each map has a header defining its properties:
+
+```asm
+map_header \1, \2, \3, \4, \5, \6, \7, \8, \9
+
+; Parameters:
+; 1 - Tileset ID
+; 2 - Map height
+; 3 - Map width  
+; 4 - Map data pointer
+; 5 - Text pointers
+; 6 - Script pointer
+; 7 - Connection data pointer
+; 8 - Object data pointer
+```
+
+**Example - Pallet Town:**
+
+```asm
+map_header PalletTown, OVERWORLD, PALLET_TOWN_HEIGHT, PALLET_TOWN_WIDTH, \
+           PalletTownBlocks, PalletTownTextPointers, PalletTownScript, \
+           PalletTownConnections, PalletTownObject
+```
+
+### Map Object Structure
+
+**File:** `constants/map_object_constants.asm`
+
+Defines NPCs, signs, and warps:
+
+```asm
+; Border block (1 byte)
+db border_block_id
+
+; Warps (3 bytes each)
+db num_warps
+db y, x, warp_dest_id
+
+; Signs (3 bytes each)
+db num_signs  
+db y, x, sign_text_id
+
+; NPCs (varies)
+db num_sprites
+db picture_id, y, x, movement, text_id
+```
+
+## Sprite Data Structures
+
+### Sprite State Data 1
+
+**Size:** 16 bytes per sprite
+
+**File:** `macros/ram.asm`
+
+```asm
+spritestatedata1 prefix
+prefix + PictureID::             db   ; Sprite graphic ID
+prefix + MovementStatus::        db   ; 0=uninitialized, 1=ready, 2=delayed, 3=moving
+prefix + ImageIndex::            db   ; Current animation frame
+prefix + YStepVector::           db   ; Y movement delta (-1, 0, 1)
+prefix + YPixels::               db   ; Y screen position
+prefix + XStepVector::           db   ; X movement delta (-1, 0, 1)  
+prefix + XPixels::               db   ; X screen position
+prefix + IntraAnimFrameCounter:: db   ; Animation sub-frame (0-3)
+prefix + AnimFrameCounter::      db   ; Animation frame (0-3)
+prefix + FacingDirection::       db   ; 0=down, 4=up, 8=left, 12=right
+prefix + YAdjusted::             db   ; Adjusted Y coordinate
+prefix + XAdjusted::             db   ; Adjusted X coordinate
+prefix + CollisionData::         db   ; Collision flags
+                                 ds 3 ; Padding
+```
+
+### Sprite State Data 2
+
+**Size:** 16 bytes per sprite
+
+Stores map position and movement AI:
+
+```asm
+spritestatedata2 prefix
+prefix + WalkAnimationCounter:: db
+                                ds 1  ; Unused
+prefix + YDisplacement::        db   ; Y offset from tile
+prefix + XDisplacement::        db   ; X offset from tile
+prefix + MapY::                 db   ; Y tile position on map
+prefix + MapX::                 db   ; X tile position on map
+prefix + MovementByte1::        db   ; Movement pattern data
+prefix + GrassPriority::        db   ; Draw priority in grass
+prefix + MovementDelay::        db   ; Frames until next move
+prefix + OrigFacingDirection::  db   ; Starting direction
+                                ds 3  ; Unused
+prefix + PictureID::            db   ; Sprite graphic ID (copy)
+prefix + ImageBaseOffset::      db   ; VRAM offset
+                                ds 1  ; Unused
+```
+
+## Battle Data Structures
+
+### Battle Status Flags
+
+**File:** `constants/battle_constants.asm`
+
+**Status Byte 1:**
+
+```asm
+const_def
+const STORING_ENERGY           ; bit 0 - Using Bide
+const THRASHING_ABOUT          ; bit 1 - Thrash/Petal Dance
+const ATTACKING_MULTIPLE_TIMES ; bit 2 - Multi-hit move
+const FLINCHED                 ; bit 3 - Flinched this turn
+const CHARGING_UP              ; bit 4 - Solar Beam/Fly/etc charge turn
+const USING_TRAPPING_MOVE      ; bit 5 - Wrap/Bind/etc
+const INVULNERABLE             ; bit 6 - Underground/flying (Dig/Fly)
+const CONFUSED                 ; bit 7 - Confused
+```
+
+**Status Byte 2:**
+
+```asm
+const_def
+const USING_X_ACCURACY         ; bit 0 - X Accuracy active
+const PROTECTED_BY_MIST        ; bit 1 - Mist active
+const GETTING_PUMPED           ; bit 2 - Focus Energy active
+; bit 3 unused
+const HAS_SUBSTITUTE_UP        ; bit 4 - Substitute active
+const NEEDS_TO_RECHARGE        ; bit 5 - Hyper Beam recharge
+const USING_RAGE               ; bit 6 - Rage active
+const SEEDED                   ; bit 7 - Leech Seed active
+```
+
+**Status Byte 3:**
+
+```asm
+const_def
+const BADLY_POISONED           ; bit 0 - Toxic (damage increases)
+const HAS_LIGHT_SCREEN_UP      ; bit 1 - Light Screen active
+const HAS_REFLECT_UP           ; bit 2 - Reflect active  
+const TRANSFORMED              ; bit 3 - Transform active
+```
+
+### Damage Calculation
+
+**Formula:**
+
+```
+Damage = ((2 * Level + 10) / 250) * (Attack / Defense) * BasePower + 2
+
+Modifiers:
+- Random: * (217-255) / 255
+- STAB: * 1.5 if move type matches Pokémon type
+- Type effectiveness: * 0, 0.5, 1, or 2
+- Critical hit: * 2
+```
+
+### Stat Calculation
+
+**Formula:**
+
+```asm
+; For HP:
+HP = ((Base + DV) * 2 + (Stat_EXP^0.5) / 4) * Level / 100 + Level + 10
+
+; For other stats:
+Stat = ((Base + DV) * 2 + (Stat_EXP^0.5) / 4) * Level / 100 + 5
+
+; At level 100:
+Max_Stat = (Base + DV) * 2 + 63 + 5
+```
+
+**Stat Experience:**
+
+- Gained from defeating Pokémon
+- Each stat has separate EXP (0-65535)
+- At max (65535): adds 63 stat points at level 100
+
+## Save Data Structure
+
+**File:** `ram/sram.asm`
+
+Save data is stored in cartridge SRAM:
+
+```asm
+SECTION "Save Data", SRAM
+
+sPlayerName::       ds NAME_LENGTH
+sMainData::
+    ; Player data
+    ds wMainDataEnd - wMainDataStart
+    
+; Checksums
+sMainDataChecksum:: dw
+
+; Box data (stored separately for space)
+sBox1::             ds MONS_PER_BOX * BOXMON_STRUCT_LENGTH
+; ... (12 boxes total)
+```
+
+**Checksum Calculation:**
+
+```asm
+CalcChecksum:
+    ; XOR all bytes in save data
+    ; Store in checksum field
+    ; Used to detect corruption
+```
+
+## Data Structure Tables
+
+### Size Reference
+
+| Structure | Size | Count | Total |
+|-----------|------|-------|-------|
+| Base Stats | 28 bytes | 190 species | 5,320 bytes |
+| Party Mon | 44 bytes | 6 max | 264 bytes |
+| Box Mon | 33 bytes | 20 per box | 660 bytes/box |
+| Battle Mon | 44 bytes | 2 (player+enemy) | 88 bytes |
+| Move Data | 6 bytes | 165 moves | 990 bytes |
+| Sprite State 1 | 16 bytes | 16 sprites | 256 bytes |
+| Sprite State 2 | 16 bytes | 16 sprites | 256 bytes |
+
+## Memory Alignment
+
+<Info>
+**Important:** Many structures must be aligned to specific boundaries:
+
+- Sprite data: 256-byte aligned (low byte = $00)
+- Map data: Bank-aligned
+- Graphics: Tile-aligned (16 bytes)
+</Info>
+
+## Usage Examples
+
+### Reading Pokémon Stats
+
+```asm
+; Load first party Pokémon's Attack stat
+ld hl, wPartyMon1Attack
+ld a, [hli]  ; High byte
+ld b, a
+ld c, [hl]   ; Low byte
+; BC now contains Attack stat
+```
+
+### Modifying DVs
+
+```asm
+; Give perfect DVs (15 in all stats)
+ld hl, wPartyMon1DVs
+ld a, $FF    ; 1111 1111 (15 Attack, 15 Defense)
+ld [hli], a
+ld a, $FF    ; 1111 1111 (15 Speed, 15 Special)  
+ld [hl], a
+
+; HP DV is calculated automatically:
+; HP = 1111 binary = 15
+```
+
+### Creating Map Objects
+
+```asm
+PalletTownObject:
+    db 5  ; Border block
+    
+    db 2  ; 2 warps
+    warp 5, 5, 0, REDS_HOUSE_1F
+    warp 5, 13, 0, BLUES_HOUSE
+    
+    db 2  ; 2 signs
+    sign 9, 13, 1   ; Player's house sign
+    sign 9, 7, 2    ; Rival's house sign
+    
+    db 3  ; 3 NPCs
+    db SPRITE_PROF_OAK, 8, 8, STAY, 1  ; Professor Oak
+```
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Use Structure Offsets" icon="arrow-right">
+    Always use named offsets (MON_HP, MON_LEVEL) instead of hardcoded values.
+  </Card>
+  <Card title="Validate Data" icon="check-circle">
+    Check bounds and validity when reading player-controlled data.
+  </Card>
+  <Card title="Preserve Alignment" icon="align-justify">
+    Be careful when modifying structure sizes - they may need specific alignment.
+  </Card>
+  <Card title="Document Custom Structures" icon="file-alt">
+    If you add new structures, document the layout and purpose clearly.
+  </Card>
+</CardGroup>
+
+## Related Pages
+
+- [Constants Reference](/reference/constants) - Constant values and IDs
+- [Macros Reference](/reference/macros) - Structure definition macros
+- [Engine Modules](/reference/engine-modules) - How structures are used

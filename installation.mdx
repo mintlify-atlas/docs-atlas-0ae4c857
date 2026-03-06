@@ -1,0 +1,303 @@
+---
+title: Installation
+description: Set up RGBDS and build tools to assemble Pokémon Red and Blue from source
+---
+
+## Overview
+
+To build Pokémon Red and Blue from source, you need to install:
+
+1. **RGBDS 1.0.1** - The Game Boy assembler, linker, and graphics tools
+2. **Build tools** - `make`, `git`, and a C compiler (`gcc` or `clang`)
+
+<Warning>
+The project requires **RGBDS version 1.0.1** specifically. Older versions will not work, and newer versions may have compatibility issues. If problems occur with newer versions, download 1.0.1 exactly.
+</Warning>
+
+Follow the instructions below for your operating system. If you encounter any issues, ask for help on [Discord](https://discord.gg/d5dubZ3) in the #pokered channel.
+
+---
+
+## Windows 10 / Windows 11
+
+The recommended method for Windows is to use **Windows Subsystem for Linux (WSL)**, which provides a full Linux environment.
+
+<Steps>
+  <Step title="Install WSL">
+    Download and install [Windows Subsystem for Linux](https://docs.microsoft.com/en-us/windows/wsl/install-win10). This will give you a Linux terminal environment within Windows.
+    
+    Open PowerShell as Administrator and run:
+    ```powershell
+    wsl --install
+    ```
+  </Step>
+
+  <Step title="Open WSL Terminal">
+    After installation, open the **WSL terminal** from your Start menu.
+  </Step>
+
+  <Step title="Update WSL Packages">
+    Before continuing, update your distribution's package manager. For Ubuntu/Debian (the default):
+    
+    ```bash
+    apt-get update && apt-get upgrade
+    ```
+  </Step>
+
+  <Step title="Navigate to Your Working Directory">
+    WSL has its own file system, but Windows files are accessible from `/mnt/c/`. It's recommended to store your project in a Windows directory for easy access.
+    
+    For example, to work in your Windows Desktop folder:
+    ```bash
+    cd /mnt/c/Users/<username>/Desktop
+    ```
+    
+    <Info>
+    Replace `<username>` with your actual Windows username. You'll need to run this command every time you open WSL.
+    </Info>
+  </Step>
+
+  <Step title="Follow Linux Instructions">
+    Now follow the [Linux installation instructions](#linux) below for your WSL distribution (usually Ubuntu).
+  </Step>
+</Steps>
+
+---
+
+## Windows (Cygwin Alternative)
+
+If you prefer not to use WSL, you can use **Cygwin** to get a Unix-like environment on Windows.
+
+<Steps>
+  <Step title="Download Cygwin">
+    Download the appropriate installer:
+    - **setup-x86_64.exe** for 64-bit Windows
+    - **setup-x86.exe** for 32-bit Windows
+    
+    Get it from [cygwin.com/install.html](http://cygwin.com/install.html)
+  </Step>
+
+  <Step title="Install Required Packages">
+    Run the setup and leave default settings. At the **"Select Packages"** step, install these packages from the **"Devel"** category:
+    
+    - `make`
+    - `git`
+    - `gcc-core`
+    
+    Double-click on "Skip" next to each package to select the most recent version.
+  </Step>
+
+  <Step title="Install RGBDS 1.0.1">
+    Follow the [RGBDS installation instructions for Windows with Cygwin](https://rgbds.gbdev.io/install#pre-built) to install RGBDS 1.0.1.
+  </Step>
+
+  <Step title="Configure Working Directory">
+    Open the **Cygwin terminal**. By default, Cygwin uses `C:\cygwin64\home\<username>` as your home directory.
+    
+    To work in a different location like your Windows Desktop:
+    ```bash
+    cd /cygdrive/c/Users/<username>/Desktop
+    ```
+    
+    <Note>
+    In Cygwin, the `C:\` drive is `/cygdrive/c/`. Replace `<username>` with your Windows username.
+    </Note>
+  </Step>
+</Steps>
+
+You're now ready to [build pokered](#verifying-installation)!
+
+---
+
+## macOS
+
+<Steps>
+  <Step title="Install Homebrew">
+    Install [Homebrew](https://brew.sh/), the package manager for macOS. Open **Terminal** and run:
+    
+    ```bash
+    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+    ```
+    
+    Follow the on-screen instructions to complete installation.
+  </Step>
+
+  <Step title="Install RGBDS 1.0.1">
+    Follow the [RGBDS installation instructions for macOS](https://rgbds.gbdev.io/install#pre-built) to install RGBDS 1.0.1.
+    
+    Typically this involves:
+    ```bash
+    brew install rgbds
+    ```
+    
+    <Warning>
+    If Homebrew installs a version newer than 1.0.1 and you encounter issues, you may need to install version 1.0.1 specifically.
+    </Warning>
+  </Step>
+</Steps>
+
+You're now ready to [build pokered](#verifying-installation)!
+
+---
+
+## Linux
+
+Installation steps vary by distribution. Choose your distro below:
+
+### Debian / Ubuntu
+
+<Steps>
+  <Step title="Install Build Tools">
+    Open **Terminal** and install the required packages:
+    
+    ```bash
+    sudo apt-get install make gcc git
+    ```
+  </Step>
+
+  <Step title="Build RGBDS from Source">
+    Follow the [RGBDS instructions for building from source](https://rgbds.gbdev.io/install#building-from-source) to build RGBDS 1.0.1.
+    
+    Quick summary:
+    ```bash
+    # Install dependencies
+    sudo apt-get install bison pkg-config libpng-dev
+    
+    # Download RGBDS 1.0.1
+    git clone https://github.com/gbdev/rgbds.git
+    cd rgbds
+    git checkout v1.0.1
+    
+    # Build and install
+    make
+    sudo make install
+    ```
+  </Step>
+</Steps>
+
+### OpenSUSE
+
+<Steps>
+  <Step title="Install Build Tools">
+    ```bash
+    sudo zypper install make gcc git
+    ```
+  </Step>
+
+  <Step title="Build RGBDS from Source">
+    Follow the [RGBDS instructions for building from source](https://rgbds.gbdev.io/install#building-from-source) to build RGBDS 1.0.1.
+  </Step>
+</Steps>
+
+### Arch Linux
+
+<Steps>
+  <Step title="Install Packages">
+    Arch Linux has RGBDS available in the official repositories:
+    
+    ```bash
+    sudo pacman -S make gcc git rgbds
+    ```
+    
+    <Info>
+    If you prefer to compile RGBDS yourself or need version 1.0.1 specifically, follow the [RGBDS build instructions](https://rgbds.gbdev.io/install#building-from-source).
+    </Info>
+  </Step>
+</Steps>
+
+### Termux (Android)
+
+<Steps>
+  <Step title="Install Build Tools">
+    ```bash
+    pkg install make clang git sed
+    ```
+  </Step>
+
+  <Step title="Install RGBDS">
+    ```bash
+    pkg install rgbds
+    ```
+    
+    Or build from source using the [RGBDS instructions](https://rgbds.gbdev.io/install#building-from-source) if you need version 1.0.1 specifically.
+  </Step>
+</Steps>
+
+### Other Distributions
+
+If your distribution isn't listed, install these packages from your package manager:
+
+- `make`
+- `gcc` (or `clang`)
+- `git`
+- `rgbds`
+
+If `rgbds` isn't available in your repositories, follow the [RGBDS instructions for building from source](https://rgbds.gbdev.io/install#building-from-source) to build RGBDS 1.0.1.
+
+---
+
+## Verifying Installation
+
+After installing RGBDS and build tools, verify everything is working:
+
+<CodeGroup>
+```bash Check RGBDS Version
+rgbasm --version
+```
+
+```bash Check Make
+make --version
+```
+
+```bash Check Git
+git --version
+```
+</CodeGroup>
+
+You should see version information for each tool. For RGBDS, verify you have version 1.0.1:
+
+```
+rgbasm version 1.0.1
+```
+
+<Note>
+If the commands aren't found, make sure the installation completed successfully and that the tools are in your system's PATH.
+</Note>
+
+---
+
+## Advanced: Using a Local RGBDS Version
+
+If you have multiple projects requiring different RGBDS versions, you can install RGBDS in a local directory instead of globally.
+
+<Steps>
+  <Step title="Build RGBDS in Local Directory">
+    Build or extract RGBDS 1.0.1 into a subdirectory like `pokered/rgbds-1.0.1/`:
+    
+    ```bash
+    cd pokered
+    mkdir rgbds-1.0.1
+    # Build or copy RGBDS binaries here
+    ```
+  </Step>
+
+  <Step title="Specify RGBDS Path When Building">
+    When running `make`, specify the RGBDS directory:
+    
+    ```bash
+    make RGBDS=rgbds-1.0.1/
+    ```
+    
+    This tells the Makefile to use the RGBDS binaries from your local directory instead of the system-wide installation.
+  </Step>
+</Steps>
+
+---
+
+## Next Steps
+
+Now that you have all the tools installed, you're ready to build your first ROM!
+
+<Card title="Quick Start Guide" icon="rocket" href="/quickstart">
+  Learn how to clone the repository, build ROMs, and verify your build
+</Card>

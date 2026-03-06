@@ -1,0 +1,364 @@
+---
+title: 'Game Boy Hardware'
+description: 'Understanding the Game Boy hardware architecture and specifications'
+---
+
+## Overview
+
+Pokémon Red and Blue run on the original Game Boy (DMG - Dot Matrix Game), released in 1989. Understanding the hardware is essential for comprehending how the game operates at a low level.
+
+## CPU Architecture
+
+The Game Boy uses a custom Sharp LR35902 CPU, which is a hybrid between the Intel 8080 and Zilog Z80:
+
+<CardGroup cols={2}>
+  <Card title="Clock Speed" icon="clock">
+    4.194304 MHz (often written as ~4.19 MHz)
+  </Card>
+  <Card title="Instruction Set" icon="code">
+    Z80-like with some 8080 influences
+  </Card>
+  <Card title="Registers" icon="microchip">
+    8-bit: A, F, B, C, D, E, H, L
+    16-bit: AF, BC, DE, HL, SP, PC
+  </Card>
+  <Card title="Bits" icon="binary">
+    8-bit CPU with 16-bit address bus
+  </Card>
+</CardGroup>
+
+## Memory Architecture
+
+### Address Space Layout
+
+The Game Boy has a 16-bit address bus, providing 64KB of addressable memory:
+
+| Address Range | Size | Region | Description |
+|---------------|------|--------|-------------|
+| `$0000-$3FFF` | 16KB | ROM Bank 0 | Fixed ROM, always accessible |
+| `$4000-$7FFF` | 16KB | ROM Bank N | Switchable ROM banks |
+| `$8000-$9FFF` | 8KB | VRAM | Video RAM for tiles and maps |
+| `$A000-$BFFF` | 8KB | External RAM | Cartridge RAM (battery-backed) |
+| `$C000-$CFFF` | 4KB | WRAM Bank 0 | Work RAM |
+| `$D000-$DFFF` | 4KB | WRAM Bank 1 | Work RAM |
+| `$E000-$FDFF` | 7.5KB | Echo RAM | Mirror of C000-DDFF |
+| `$FE00-$FE9F` | 160B | OAM | Object Attribute Memory (sprites) |
+| `$FEA0-$FEFF` | 96B | Unusable | Not usable |
+| `$FF00-$FF7F` | 128B | I/O Registers | Hardware control registers |
+| `$FF80-$FFFE` | 127B | HRAM | High RAM (fast access) |
+| `$FFFF` | 1B | IE Register | Interrupt Enable register |
+
+<Warning>
+Echo RAM (`$E000-$FDFF`) mirrors `$C000-$DDFF` but should not be used. Accessing it wastes cycles and can cause issues on some hardware revisions.
+</Warning>
+
+## Hardware Registers
+
+The Game Boy's hardware is controlled through memory-mapped I/O registers at `$FF00-$FF7F`. Here are the key categories from `hardware.inc`:
+
+### Joypad Input (`$FF00` - rJOYP)
+
+```asm
+def rJOYP equ $FF00  ; Joypad register
+
+; Button bits (when bit 5 is cleared)
+def B_JOYP_START  equ 3  ; 0 = Start pressed
+def B_JOYP_SELECT equ 2  ; 0 = Select pressed
+def B_JOYP_B      equ 1  ; 0 = B pressed
+def B_JOYP_A      equ 0  ; 0 = A pressed
+
+; D-pad bits (when bit 4 is cleared)
+def B_JOYP_DOWN   equ 3  ; 0 = Down pressed
+def B_JOYP_UP     equ 2  ; 0 = Up pressed
+def B_JOYP_LEFT   equ 1  ; 0 = Left pressed
+def B_JOYP_RIGHT  equ 0  ; 0 = Right pressed
+```
+
+<Info>
+Button inputs are active-low (0 = pressed). You must select which set of inputs to read by clearing either bit 4 (D-pad) or bit 5 (buttons).
+</Info>
+
+### Timer Registers
+
+```asm
+def rDIV  equ $FF04  ; Divider register (increments at 16384 Hz)
+def rTIMA equ $FF05  ; Timer counter
+def rTMA  equ $FF06  ; Timer modulo
+def rTAC  equ $FF07  ; Timer control
+
+; Timer control flags
+def TAC_START equ 1 << 2  ; Enable timer
+def TAC_4KHZ   equ %00    ; ~4 KHz
+def TAC_262KHZ equ %01    ; ~262 KHz
+def TAC_65KHZ  equ %10    ; ~65 KHz
+def TAC_16KHZ  equ %11    ; ~16 KHz
+```
+
+### Interrupt Flags
+
+```asm
+def rIF equ $FF0F  ; Interrupt flags
+def rIE equ $FFFF  ; Interrupt enable
+
+; Interrupt bits
+def B_IF_VBLANK equ 0  ; VBlank interrupt
+def B_IF_STAT   equ 1  ; LCD STAT interrupt
+def B_IF_TIMER  equ 2  ; Timer interrupt
+def B_IF_SERIAL equ 3  ; Serial interrupt
+def B_IF_JOYPAD equ 4  ; Joypad interrupt
+```
+
+### Interrupt Vectors
+
+Interrupt handlers are located at fixed addresses:
+
+```asm
+def INT_HANDLER_VBLANK equ $0040  ; VBlank
+def INT_HANDLER_STAT   equ $0048  ; LCD STAT
+def INT_HANDLER_TIMER  equ $0050  ; Timer
+def INT_HANDLER_SERIAL equ $0058  ; Serial
+def INT_HANDLER_JOYPAD equ $0060  ; Joypad
+```
+
+## Display System (PPU)
+
+The Picture Processing Unit (PPU) handles all graphics rendering.
+
+### Display Specifications
+
+<CardGroup cols={2}>
+  <Card title="Resolution" icon="tv">
+    160×144 pixels (20×18 tiles)
+  </Card>
+  <Card title="Palette" icon="palette">
+    4 shades of green (DMG)
+  </Card>
+  <Card title="Refresh Rate" icon="sync">
+    ~59.7 Hz (approximately 60 FPS)
+  </Card>
+  <Card title="Tile Size" icon="grid">
+    8×8 pixels, 2 bits per pixel
+  </Card>
+</CardGroup>
+
+### LCD Control Register (`$FF40` - rLCDC)
+
+```asm
+def rLCDC equ $FF40
+
+; LCDC bits
+def B_LCDC_ENABLE   equ 7  ; LCD enable
+def B_LCDC_WIN_MAP  equ 6  ; Window tilemap (0=$9800, 1=$9C00)
+def B_LCDC_WINDOW   equ 5  ; Window enable
+def B_LCDC_BLOCKS   equ 4  ; Tile data (0=$8800-97FF, 1=$8000-8FFF)
+def B_LCDC_BG_MAP   equ 3  ; BG tilemap (0=$9800, 1=$9C00)
+def B_LCDC_OBJ_SIZE equ 2  ; Sprite size (0=8×8, 1=8×16)
+def B_LCDC_OBJS     equ 1  ; Sprites enable
+def B_LCDC_BG       equ 0  ; BG enable
+
+; Common value used in Pokémon Red/Blue:
+def LCDC_DEFAULT equ LCDC_ON | LCDC_WIN_9C00 | LCDC_WIN_ON | \
+                     LCDC_BLOCK21 | LCDC_BG_9800 | LCDC_OBJ_8 | \
+                     LCDC_OBJ_ON | LCDC_BG_ON
+```
+
+### LCD Status Register (`$FF41` - rSTAT)
+
+```asm
+def rSTAT equ $FF41
+
+; PPU modes
+def STAT_HBLANK equ %00  ; Mode 0: HBlank
+def STAT_VBLANK equ %01  ; Mode 1: VBlank
+def STAT_OAM    equ %10  ; Mode 2: OAM scan
+def STAT_LCD    equ %11  ; Mode 3: Drawing pixels
+```
+
+### Scroll Registers
+
+```asm
+def rSCY equ $FF42  ; Background Y scroll
+def rSCX equ $FF43  ; Background X scroll
+def rLY  equ $FF44  ; Current scanline (0-153)
+def rLYC equ $FF45  ; LY compare for interrupts
+```
+
+### Palette Registers (DMG)
+
+```asm
+def rBGP  equ $FF47  ; Background palette
+def rOBP0 equ $FF48  ; Object palette 0
+def rOBP1 equ $FF49  ; Object palette 1
+
+; Shade values
+def SHADE_WHITE equ %00
+def SHADE_LIGHT equ %01
+def SHADE_DARK  equ %10
+def SHADE_BLACK equ %11
+```
+
+## Audio System (APU)
+
+The Game Boy has 4 audio channels:
+
+<Accordion title="Channel 1: Pulse with Sweep">
+```asm
+def rAUD1SWEEP equ $FF10  ; Sweep control
+def rAUD1LEN   equ $FF11  ; Length and duty cycle
+def rAUD1ENV   equ $FF12  ; Volume envelope
+def rAUD1LOW   equ $FF13  ; Frequency low byte
+def rAUD1HIGH  equ $FF14  ; Frequency high byte and control
+```
+
+Supports frequency sweep, pulse wave duty cycle control, and volume envelope.
+</Accordion>
+
+<Accordion title="Channel 2: Pulse">
+```asm
+def rAUD2LEN   equ $FF16  ; Length and duty cycle
+def rAUD2ENV   equ $FF17  ; Volume envelope
+def rAUD2LOW   equ $FF18  ; Frequency low byte
+def rAUD2HIGH  equ $FF19  ; Frequency high byte and control
+```
+
+Similar to Channel 1 but without sweep functionality.
+</Accordion>
+
+<Accordion title="Channel 3: Wave Output">
+```asm
+def rAUD3ENA   equ $FF1A  ; Channel enable
+def rAUD3LEN   equ $FF1B  ; Length
+def rAUD3LEVEL equ $FF1C  ; Output level
+def rAUD3LOW   equ $FF1D  ; Frequency low byte
+def rAUD3HIGH  equ $FF1E  ; Frequency high byte and control
+
+; Wave pattern RAM: $FF30-$FF3F (16 bytes)
+def _AUD3WAVERAM equ $FF30
+```
+
+Plays custom waveforms stored in Wave RAM.
+</Accordion>
+
+<Accordion title="Channel 4: Noise">
+```asm
+def rAUD4LEN  equ $FF20  ; Length
+def rAUD4ENV  equ $FF21  ; Volume envelope
+def rAUD4POLY equ $FF22  ; Polynomial counter
+def rAUD4GO   equ $FF23  ; Control
+```
+
+Generates pseudo-random noise using an LFSR.
+</Accordion>
+
+### Audio Control Registers
+
+```asm
+def rAUDVOL  equ $FF24  ; Master volume
+def rAUDTERM equ $FF25  ; Channel panning
+def rAUDENA  equ $FF26  ; Audio master enable
+```
+
+<Warning>
+Writing 0 to rAUDENA (bit 7) disables the APU and resets all audio registers to 0.
+</Warning>
+
+## Cartridge Hardware (MBC3)
+
+Pokémon Red/Blue use the MBC3 (Memory Bank Controller 3) chip:
+
+```asm
+; RAM enable/disable
+def rRAMG equ $0000  ; $0A enables, $00 disables
+
+; ROM bank selection
+def rROMB equ $2000  ; Select ROM bank 1-127
+
+; RAM bank selection OR RTC register select
+def rRAMB equ $4000  ; Select RAM bank 0-3 or RTC
+
+; RTC latch
+def rRTCLATCH equ $6000  ; Write $00 then $01 to latch
+
+; RTC registers (when selected via rRAMB)
+def RAMB_RTC_S  equ $08  ; Seconds (0-59)
+def RAMB_RTC_M  equ $09  ; Minutes (0-59)
+def RAMB_RTC_H  equ $0A  ; Hours (0-23)
+def RAMB_RTC_DL equ $0B  ; Days low (0-255)
+def RAMB_RTC_DH equ $0C  ; Days high + flags
+```
+
+<Info>
+The MBC3 provides up to 2MB ROM (128 banks × 16KB) and 32KB RAM (4 banks × 8KB), plus a real-time clock.
+</Info>
+
+## OAM (Object Attribute Memory)
+
+Sprite data is stored in OAM at `$FE00-$FE9F`:
+
+```asm
+; OAM structure (4 bytes per sprite, 40 sprites max)
+rsreset
+def OAMA_Y      rb  ; Y position (minus 16)
+def OAMA_X      rb  ; X position (minus 8)
+def OAMA_TILEID rb  ; Tile ID
+def OAMA_FLAGS  rb  ; Attributes
+def OBJ_SIZE    rb 0
+
+; Attribute flags
+def B_OAM_PRIO  equ 7  ; 0=above BG, 1=behind BG colors 1-3
+def B_OAM_YFLIP equ 6  ; Vertical flip
+def B_OAM_XFLIP equ 5  ; Horizontal flip
+def B_OAM_PAL1  equ 4  ; Palette (0=OBP0, 1=OBP1)
+
+def OAM_COUNT equ 40
+def OAM_SIZE  equ OBJ_SIZE * OAM_COUNT  ; 160 bytes
+```
+
+## DMA (Direct Memory Access)
+
+```asm
+def rDMA equ $FF46  ; OAM DMA start address (high byte)
+```
+
+DMA copies 160 bytes from `$XX00-$XX9F` to OAM in ~160 microseconds. During DMA, only HRAM is accessible.
+
+## Serial Link Cable
+
+```asm
+def rSB equ $FF01  ; Serial data
+def rSC equ $FF02  ; Serial control
+
+; Serial control bits
+def B_SC_START  equ 7  ; Transfer active
+def B_SC_SOURCE equ 0  ; 0=external clock, 1=internal
+```
+
+Used for trading Pokémon and battling between Game Boys.
+
+## Performance Characteristics
+
+| Operation | Cycles | Time (µs) |
+|-----------|--------|----------|
+| NOP | 4 | ~0.95 |
+| LD r, r | 4 | ~0.95 |
+| LD r, n | 8 | ~1.91 |
+| LD (HL), n | 12 | ~2.86 |
+| CALL | 24 | ~5.72 |
+| RET | 16 | ~3.81 |
+| Scanline | 456 | ~108.7 |
+| VBlank | 4560 | ~1087 |
+
+<Tip>
+One frame (1/60 second) provides approximately 70,224 cycles of processing time.
+</Tip>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Memory Layout" href="/architecture/memory-layout" icon="memory">
+    Explore RAM organization and variable layout
+  </Card>
+  <Card title="ROM Structure" href="/architecture/rom-structure" icon="file">
+    Learn how code and data are organized in ROM
+  </Card>
+</CardGroup>

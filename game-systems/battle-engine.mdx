@@ -1,0 +1,293 @@
+---
+title: "Battle Engine"
+description: "Core battle system mechanics, damage calculation, and status effects"
+---
+
+The battle engine is the heart of Pokémon Red/Blue's combat system. It handles turn-based battles, damage calculation, move effects, status conditions, and AI behavior.
+
+## Battle Flow
+
+The battle system is implemented in `engine/battle/core.asm` and coordinates all aspects of combat from battle initialization to victory conditions.
+
+<Steps>
+  <Step title="Battle Initialization">
+    When a battle starts, `StartBattle` initializes battle variables and determines which Pokémon are active:
+    
+    ```asm
+    StartBattle:
+        xor a
+        ld [wPartyGainExpFlags], a
+        ld [wPartyFoughtCurrentEnemyFlags], a
+        ld [wActionResultOrTookBattleTurn], a
+        inc a
+        ld [wFirstMonsNotOutYet], a
+    ```
+  </Step>
+  
+  <Step title="Visual Transition">
+    The `SlidePlayerAndEnemySilhouettesOnScreen` function creates the iconic battle transition by sliding silhouettes onto the screen:
+    
+    ```asm
+    .slideSilhouettesLoop
+        ld h, b
+        ld l, $40
+        call SetScrollXForSlidingPlayerBodyLeft
+        inc b
+        inc b
+        ld h, $0
+        ld l, $60
+        call SetScrollXForSlidingPlayerBodyLeft
+    ```
+  </Step>
+  
+  <Step title="Turn Processing">
+    Each turn processes player and enemy actions, applies move effects, and checks for battle end conditions.
+  </Step>
+  
+  <Step title="Battle Conclusion">
+    The battle ends when all Pokémon on one side faint, the player flees, or special conditions are met (Safari Zone, trainer battles).
+  </Step>
+</Steps>
+
+## Battle Types
+
+The game supports three distinct battle types defined in `constants/battle_constants.asm`:
+
+<CodeGroup>
+```asm Battle Type Constants
+const_def
+const BATTLE_TYPE_NORMAL  ; 0
+const BATTLE_TYPE_OLD_MAN ; 1
+const BATTLE_TYPE_SAFARI  ; 2
+```
+</CodeGroup>
+
+- **Normal Battles**: Standard wild encounters and trainer battles
+- **Old Man Tutorial**: The catching tutorial at the start of the game
+- **Safari Zone**: Special battles with limited turns and bait/rock mechanics
+
+## Stats and Modifiers
+
+### Base Stats
+
+Each Pokémon has five core stats:
+
+```asm
+const_def 1
+const STAT_HEALTH
+const STAT_ATTACK
+const STAT_DEFENSE
+const STAT_SPEED
+const STAT_SPECIAL
+DEF NUM_STATS EQU const_value - 1
+```
+
+### Stat Modifications
+
+During battle, stats can be temporarily modified:
+
+```asm
+const_def
+const MOD_ATTACK
+const MOD_DEFENSE
+const MOD_SPEED
+const MOD_SPECIAL
+const MOD_ACCURACY
+const MOD_EVASION
+DEF NUM_STAT_MODS EQU const_value
+```
+
+<Info>
+Stat modifications range from -6 to +6 stages, with stage 0 being the base value. Each stage multiplies the effective stat by a factor defined in the game's stat calculation routines.
+</Info>
+
+## Damage Calculation
+
+Damage calculation uses several constants and formulas:
+
+<CodeGroup>
+```asm Damage Limits
+DEF MIN_NEUTRAL_DAMAGE EQU 2
+DEF MAX_NEUTRAL_DAMAGE EQU 999
+```
+
+```asm Fixed Damage Moves
+DEF SONICBOOM_DAMAGE   EQU 20
+DEF DRAGON_RAGE_DAMAGE EQU 40
+```
+
+```asm Type Effectiveness (scaled by 10)
+DEF SUPER_EFFECTIVE    EQU 20  ; 2.0x damage
+DEF MORE_EFFECTIVE     EQU 15  ; 1.5x damage (unused)
+DEF EFFECTIVE          EQU 10  ; 1.0x damage
+DEF NOT_VERY_EFFECTIVE EQU 05  ; 0.5x damage
+DEF NO_EFFECT          EQU 00  ; 0.0x damage
+```
+</CodeGroup>
+
+<Note>
+The `MORE_EFFECTIVE` constant (15) exists in the code but is not used in Generation I. Type effectiveness is binary: super effective (2x), normal (1x), not very effective (0.5x), or no effect (0x).
+</Note>
+
+## Move Structure
+
+Each move in the game is defined with six properties:
+
+```asm
+rsreset
+DEF MOVE_ANIM   rb  ; Animation/move ID
+DEF MOVE_EFFECT rb  ; Effect type
+DEF MOVE_POWER  rb  ; Base power
+DEF MOVE_TYPE   rb  ; Type (Normal, Fire, etc.)
+DEF MOVE_ACC    rb  ; Accuracy (out of 100)
+DEF MOVE_PP     rb  ; Power Points
+DEF MOVE_LENGTH EQU _RS
+```
+
+### Move Examples
+
+From `data/moves/moves.asm`:
+
+<CodeGroup>
+```asm Basic Attacks
+move POUND,        NO_ADDITIONAL_EFFECT,        40, NORMAL,   100, 35
+move SCRATCH,      NO_ADDITIONAL_EFFECT,        40, NORMAL,   100, 35
+move TACKLE,       NO_ADDITIONAL_EFFECT,        35, NORMAL,    95, 35
+```
+
+```asm Special Effects
+move FIRE_PUNCH,   BURN_SIDE_EFFECT1,           75, FIRE,     100, 15
+move ICE_PUNCH,    FREEZE_SIDE_EFFECT1,         75, ICE,      100, 15
+move THUNDERPUNCH, PARALYZE_SIDE_EFFECT1,       75, ELECTRIC, 100, 15
+```
+
+```asm OHKO Moves
+move GUILLOTINE,   OHKO_EFFECT,                  1, NORMAL,    30,  5
+move HORN_DRILL,   OHKO_EFFECT,                  1, NORMAL,    30,  5
+```
+
+```asm Multi-Hit Moves
+move DOUBLESLAP,   TWO_TO_FIVE_ATTACKS_EFFECT,  15, NORMAL,    85, 10
+move COMET_PUNCH,  TWO_TO_FIVE_ATTACKS_EFFECT,  18, NORMAL,    85, 15
+```
+</CodeGroup>
+
+## Status Conditions
+
+### Non-Volatile Status
+
+Status conditions that persist outside of battle:
+
+```asm
+DEF SLP_MASK EQU %111 ; 0-7 turns of sleep
+const_def 3
+const PSN ; 3 - Poison
+const BRN ; 4 - Burn
+const FRZ ; 5 - Freeze
+const PAR ; 6 - Paralysis
+```
+
+<Warning>
+Sleep is stored in the lower 3 bits (0-7 turns), while other statuses use bit flags. A Pokémon can only have one non-volatile status at a time.
+</Warning>
+
+### Battle Status Flags
+
+Temporary conditions during battle are tracked with bit flags:
+
+<Accordion title="Battle Status 1 Flags">
+```asm
+const_def
+const STORING_ENERGY           ; 0 - Bide
+const THRASHING_ABOUT          ; 1 - Thrash, Petal Dance
+const ATTACKING_MULTIPLE_TIMES ; 2 - Double Kick, Fury Attack
+const FLINCHED                 ; 3 - Flinch status
+const CHARGING_UP              ; 4 - Solar Beam, Fly
+const USING_TRAPPING_MOVE      ; 5 - Wrap, Bind
+const INVULNERABLE             ; 6 - Fly/Dig charge turn
+const CONFUSED                 ; 7 - Confusion
+```
+</Accordion>
+
+<Accordion title="Battle Status 2 Flags">
+```asm
+const_def
+const USING_X_ACCURACY    ; 0
+const PROTECTED_BY_MIST   ; 1
+const GETTING_PUMPED      ; 2 - Focus Energy
+const_skip                ; 3 - unused
+const HAS_SUBSTITUTE_UP   ; 4
+const NEEDS_TO_RECHARGE   ; 5 - Hyper Beam
+const USING_RAGE          ; 6
+const SEEDED              ; 7 - Leech Seed
+```
+</Accordion>
+
+<Accordion title="Battle Status 3 Flags">
+```asm
+const_def
+const BADLY_POISONED      ; 0 - Toxic
+const HAS_LIGHT_SCREEN_UP ; 1
+const HAS_REFLECT_UP      ; 2
+const TRANSFORMED         ; 3
+```
+</Accordion>
+
+## STAB and Effectiveness
+
+The damage multiplier system combines STAB (Same Type Attack Bonus) and type effectiveness:
+
+```asm
+DEF BIT_STAB_DAMAGE EQU 7
+DEF EFFECTIVENESS_MASK EQU %01111111
+```
+
+- Bit 7 indicates STAB (1.5x damage when move type matches user's type)
+- Bits 0-6 store type effectiveness multiplier
+
+## Trainer Data
+
+Trainer-owned Pokémon use standardized DVs (Determinant Values) for stats:
+
+```asm
+DEF ATKDEFDV_TRAINER EQU $98
+DEF SPDSPCDV_TRAINER EQU $88
+```
+
+<Info>
+DVs (now called IVs in later generations) are hidden values from 0-15 that determine individual Pokémon stats. Trainer Pokémon use fixed DV values, while wild Pokémon have random DVs.
+</Info>
+
+## Battle AI
+
+The game includes a sophisticated AI system in `engine/battle/trainer_ai.asm` that evaluates moves based on:
+
+- Type effectiveness
+- Status effects
+- Remaining HP
+- Move power and accuracy
+- Special trainer AI modifications per class
+
+<CardGroup cols={2}>
+  <Card title="Pokémon Stats" icon="chart-line" href="/game-systems/pokemon">
+    Stat calculation and growth
+  </Card>
+  <Card title="Trainers" icon="user" href="/game-systems/trainers">
+    Trainer AI and party data
+  </Card>
+  <Card title="Items" icon="flask" href="/game-systems/items">
+    Battle items and TMs
+  </Card>
+  <Card title="Reference" icon="book" href="/reference/constants">
+    Battle constants and data structures
+  </Card>
+</CardGroup>
+
+## Key Files
+
+- `engine/battle/core.asm` - Main battle loop
+- `engine/battle/effects.asm` - Move effect handlers
+- `engine/battle/trainer_ai.asm` - AI decision making
+- `constants/battle_constants.asm` - All battle-related constants
+- `data/battle/` - Battle data tables
+- `data/moves/moves.asm` - Move definitions

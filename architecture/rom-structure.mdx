@@ -1,0 +1,535 @@
+---
+title: 'ROM Structure'
+description: 'How code and data are organized across ROM banks in Pokémon Red/Blue'
+---
+
+## Overview
+
+Pokémon Red and Blue are organized into ROM banks, with code and data carefully distributed across 45 banks (Banks 0-44). Understanding this structure is essential for navigating and modifying the disassembly.
+
+## ROM Bank Layout
+
+From `layout.link`, the ROM is organized as follows:
+
+<Accordion title="Bank 0 (ROM0): Home Bank - Always Accessible">
+Bank 0 is special - it's always mapped to `$0000-$3FFF` and contains:
+
+- **$0000-$0067**: RST vectors and interrupt handlers
+- **$0100-$014F**: ROM header (title, checksums, etc.)
+- **$0150-$3FFF**: Core routines used throughout the game
+
+```asm
+ROM0
+  org $0000
+  "NULL"           ; Empty for rst $00
+  org $0008  
+  "rst8"           ; Fast call to $0008
+  ; ... (other RST vectors)
+  org $0040
+  "vblank"         ; VBlank interrupt handler
+  org $0048
+  "lcd"            ; LCD STAT interrupt handler
+  org $0050
+  "timer"          ; Timer interrupt handler
+  org $0058
+  "serial"         ; Serial interrupt handler
+  org $0060
+  "joypad"         ; Joypad interrupt handler
+  org $0100
+  "Header"         ; ROM header
+  org $0150
+  "Home"           ; Core engine code
+```
+</Accordion>
+
+<Accordion title="Banks 1-3: Core Systems">
+**Bank 1**: Core game systems
+- Sprite facing data
+- Blackout handling
+- Mew data
+- Safari Zone logic
+- Title screen
+- Item data (prices, names)
+- OAM and sprite management
+
+**Bank 2**: Audio Engine 1
+- Sound effect headers
+- Music headers  
+- Audio engine routines
+- First set of music tracks
+
+**Bank 3**: Overworld Systems
+- Joypad handling
+- Map songs and headers
+- Player state management
+- Wild Pokémon encounters
+- Item effects and inventory
+- Field moves (Cut, etc.)
+</Accordion>
+
+<Accordion title="Banks 4-5: Graphics and Battle">
+**Bank 4**: NPC Sprites 1 + Font + Battle Engine 1
+```
+ROMX $4
+  "NPC Sprites 1"
+  "Font Graphics"
+  "Battle Engine 1"
+```
+Contains sprite graphics, font tiles, and initial battle routines.
+
+**Bank 5**: NPC Sprites 2 + Battle Engine 2
+- Additional NPC sprite sets
+- More battle engine code
+- PC system functions
+</Accordion>
+
+<Accordion title="Banks 6-7: Maps and Data">
+**Bank 6**: Maps and Time
+```
+ROMX $6
+  "Maps 1"
+  "Play Time"
+  "Maps 2"
+  "Doors and Ledges"
+```
+
+**Bank 7**: Maps and Names
+```
+ROMX $7
+  "Maps 3"
+  "Pokémon Names"  ; All 151 Pokémon names
+  "Maps 4"
+  "Hidden Events 1"
+```
+</Accordion>
+
+<Accordion title="Bank 8: Audio Engine 2">
+```
+ROMX $8
+  "Sound Effect Headers 2"
+  "Music Headers 2"
+  "Sound Effects 2"
+  "Low Health Alarm (Audio Engine 2)"
+  "Bill's PC"
+  "Audio Engine 2"
+  "Music 2"
+```
+Second audio bank with more music tracks and Bill's PC system.
+</Accordion>
+
+<Accordion title="Banks 9-13: Pokémon Graphics">
+**Banks 9-13**: Pokémon Sprite Data ("Pics")
+```
+ROMX $9:  "Pics 1" + "Battle Engine 3"
+ROMX $A:  "Pics 2" + "Battle Engine 4"
+ROMX $B:  "Pics 3" + "Battle Engine 5"
+ROMX $C:  "Pics 4" + "Battle Engine 6"
+ROMX $D:  "Pics 5" + "Slot Machines"
+```
+Each bank contains compressed Pokémon sprites plus battle engine code.
+</Accordion>
+
+<Accordion title="Banks 14-15: Battle Core">
+**Bank 14 ($E)**: Battle Engine 7
+```
+ROMX $E
+  "Battle Engine 7"
+```
+- All move data (power, accuracy, PP, effects)
+- Base stats for all 151 Pokémon
+- Pokémon cries
+- Trainer AI
+- Evolution and move learning data
+
+**Bank 15 ($F)**: Battle Core
+```
+ROMX $F
+  "Battle Core"
+```
+The main battle execution engine.
+</Accordion>
+
+<Accordion title="Banks 16-24: Maps and Events">
+These banks contain the bulk of map data and event scripts:
+
+```
+ROMX $10: "bank10" (Pokédex, trade, intro)
+ROMX $11-$18: Maps + various event systems
+  - Hidden events
+  - Gym battles
+  - NPC interactions
+  - Map scripts
+```
+
+Each map section includes:
+- Map layouts and connections
+- NPC positions and scripts  
+- Hidden item locations
+- Warp and sign data
+</Accordion>
+
+<Accordion title="Banks 25-27: Tilesets">
+```
+ROMX $19: "Tilesets 1"
+ROMX $1A: "Battle Engine 11" + "Tilesets 2"
+ROMX $1B: "Tilesets 3"
+```
+
+Contain graphical tile data for:
+- Overworld tilesets (houses, caves, cities)
+- Building interiors
+- Special locations (Pokémon Tower, Silph Co.)
+</Accordion>
+
+<Accordion title="Banks 28-31: Animations and Audio">
+**Bank 28 ($1C)**: Animations and Graphics
+```
+ROMX $1C
+  "bank1C"
+```
+- Hall of Fame
+- Healing machine animations
+- Battle transitions
+- Trading animations
+
+**Bank 29 ($1D)**: Maps and Items
+- Additional map data
+- Itemfinder functionality
+- Vending machines
+
+**Bank 30 ($1E)**: Battle Animations
+```
+ROMX $1E
+  "bank1E"
+```
+- All move animation routines
+- Animation subanimations
+- Frame blocks
+- Evolution animation
+
+**Bank 31 ($1F)**: Audio Engine 3
+- Third set of music tracks
+- Additional sound effects
+</Accordion>
+
+<Accordion title="Banks 32-44: Text">
+The final 13 banks contain all game text:
+
+```
+ROMX $20: "Text 1"
+ROMX $21: "Text 2"
+ROMX $22: "Text 3"
+ROMX $23: "Text 4"
+ROMX $24: "Text 5"
+ROMX $25: "Text 6"
+ROMX $26: "Text 7"
+ROMX $27: "Text 8"
+ROMX $28: "Text 9"
+ROMX $29: "Text 10"
+ROMX $2A: "Text 11"
+ROMX $2B: "Pokédex Text"  ; All 151 Pokédex entries
+ROMX $2C: "Move Names"    ; All move names
+```
+
+Includes:
+- NPC dialogue
+- Item descriptions
+- Move descriptions
+- Pokédex entries
+- System messages
+</Accordion>
+
+## SECTION Directives
+
+From `main.asm`, code is organized using SECTION directives:
+
+```asm
+SECTION "bank1", ROMX
+
+INCLUDE "data/sprites/facings.asm"
+INCLUDE "engine/events/black_out.asm"
+INCLUDE "data/pokemon/mew.asm"
+INCLUDE "engine/battle/safari_zone.asm"
+INCLUDE "engine/movie/title.asm"
+; ... more includes
+```
+
+Each SECTION:
+- Has a unique name (e.g., "bank1", "Battle Core")
+- Specifies a memory type (`ROM0` or `ROMX`)
+- Can optionally specify a bank number (`ROMX $1`)
+- Contains code or data
+
+<Info>
+The linker (`rgblink`) uses `layout.link` to place sections in specific banks and addresses.
+</Info>
+
+## Section Types
+
+### ROM0 Sections
+
+Fixed sections that are always accessible:
+
+```asm
+SECTION "NULL", ROM0
+SECTION "rst0", ROM0
+SECTION "High Home", ROM0  
+SECTION "Header", ROM0
+SECTION "Home", ROM0
+```
+
+### ROMX Sections  
+
+Bankable sections that get placed in specific banks:
+
+```asm
+SECTION "bank1", ROMX       ; Placed in bank $01
+SECTION "Battle Core", ROMX  ; Placed in bank $0F
+SECTION "Text 1", ROMX       ; Placed in bank $20
+```
+
+## Bank Distribution Strategy
+
+The game distributes code strategically:
+
+<Steps>
+  <Step title="Core Functions in Home">
+    Frequently-called routines stay in Bank 0 to avoid banking overhead
+  </Step>
+  
+  <Step title="Related Code Together">
+    Battle code, map code, and text are grouped by functionality
+  </Step>
+  
+  <Step title="Graphics with Code">
+    Sprite data is often paired with related engine code
+  </Step>
+  
+  <Step title="Text Isolated">
+    Text takes 13 full banks, separated from code
+  </Step>
+</Steps>
+
+## Key Data Structures
+
+### Move Data (Bank $E)
+
+```asm
+SECTION "Battle Engine 7", ROMX
+
+INCLUDE "data/moves/moves.asm"
+```
+
+Each move entry contains:
+
+```asm
+; Example: Pound
+move POUND, NO_ADDITIONAL_EFFECT, 40, NORMAL, 100, 35
+```
+
+Fields: name, effect, power, type, accuracy, PP
+
+### Base Stats (Bank $E)
+
+```asm
+INCLUDE "data/pokemon/base_stats.asm"
+```
+
+Each Pokémon has a base stats structure:
+
+```asm
+mon_base_stats BULBASAUR
+    db 45  ; HP
+    db 49  ; Attack  
+    db 49  ; Defense
+    db 45  ; Speed
+    db 65  ; Special
+    db GRASS, POISON  ; Types
+    db 45  ; Catch rate
+    db 64  ; Base exp
+    ; ... more data
+```
+
+### Pokémon Names (Bank $7)
+
+All 151 Pokémon names as null-terminated strings:
+
+```asm
+SECTION "Pokémon Names", ROMX
+
+INCLUDE "data/pokemon/names.asm"
+```
+
+## Map Organization
+
+Maps are distributed across multiple banks:
+
+```asm
+ROMX $6:  "Maps 1", "Maps 2"
+ROMX $7:  "Maps 3", "Maps 4" 
+ROMX $11: "Maps 5", "Maps 6"
+ROMX $12: "Maps 7", "Maps 8"
+ROMX $13: "Maps 9"
+ROMX $14: "Maps 10"
+; ... continues through bank $1D
+```
+
+Each map section includes:
+- Map data (block layout)
+- Warp definitions
+- Sign/interaction points
+- Trainer data
+- Scripts
+
+## Text Bank Organization
+
+Text is carefully organized for space efficiency:
+
+<CodeGroup>
+```asm Bank $20-$2A: General Text
+; NPC dialogue, item descriptions, menus
+ROMX $20: "Text 1"   ; Early game dialogue
+ROMX $21: "Text 2"   ; City NPCs
+ROMX $22: "Text 3"   ; Gym leaders
+; ... continues
+```
+
+```asm Bank $2B: Pokédex
+; All 151 Pokédex entries
+ROMX $2B: "Pokédex Text"
+```
+
+```asm Bank $2C: Move Names  
+; All move names
+ROMX $2C: "Move Names"
+```
+</CodeGroup>
+
+## Bank Usage Statistics
+
+| Bank Range | Content Type | Count |
+|------------|-------------|-------|
+| $00 | Home (always loaded) | 1 |
+| $01-$08 | Core systems + audio | 8 |
+| $09-$0D | Pokémon graphics | 5 |
+| $0E-$0F | Battle engine | 2 |
+| $10-$1D | Maps, events, tilesets | 14 |
+| $1E-$1F | Animations + audio | 2 |
+| $20-$2C | Text data | 13 |
+| **Total** | | **45 banks** |
+
+## ROM Header (Bank 0, $0100-$014F)
+
+The ROM header contains metadata:
+
+```asm
+SECTION "Header", ROM0[$0100]
+
+Start::
+    nop
+    jp Init  ; Entry point
+
+; Nintendo logo (must match for boot)
+rept 48
+    db $01  ; Nintendo logo data
+endr
+
+; Title (11 bytes)
+db "POKEMON RED"
+
+; Cartridge type, ROM size, RAM size, etc.
+```
+
+Set by `rgbfix` during build:
+
+```makefile
+RGBFIXFLAGS += -jsv -n 0 -k 01 -l 0x33 -m MBC3+RAM+BATTERY -r 03
+pokered.gbc: RGBFIXFLAGS += -p 0x00 -t "POKEMON RED"
+```
+
+## Finding Code in the ROM
+
+<Steps>
+  <Step title="Identify the Bank">
+    Check `layout.link` or `main.asm` to find which bank contains the code
+  </Step>
+  
+  <Step title="Find the Section">
+    Look for the SECTION directive in source files
+  </Step>
+  
+  <Step title="Calculate Address">
+    Bank 0: Address = file offset
+    Bank N: Address = $4000 + (offset within bank)
+  </Step>
+  
+  <Step title="Use Symbol File">
+    Check `.sym` file generated by linker for exact addresses
+  </Step>
+</Steps>
+
+### Example: Finding Pound Move Data
+
+```bash
+# From layout.link:
+ROMX $E: "Battle Engine 7"
+
+# From main.asm bank $E:
+INCLUDE "data/moves/moves.asm"
+
+# Move is in bank $0E at address ~$4000+
+# Exact address in pokered.sym:
+0e:4000 PoundMoveData
+```
+
+## Bank Size Constraints
+
+<Warning>
+Each ROM bank is exactly 16KB (16384 bytes). If a section exceeds this, linking will fail. The linker error shows which section is too large.
+</Warning>
+
+## Space Optimization
+
+The original developers used several techniques:
+
+1. **Compression**: Pokémon sprites use custom RLE compression
+2. **Shared Code**: Common routines in Bank 0
+3. **Text Encoding**: Custom character encoding saves space
+4. **Data Tables**: Efficient lookup tables instead of code
+
+## Build Output
+
+After building:
+
+```bash
+pokered.gbc    # Final ROM (1MB = 64 banks × 16KB)
+pokered.map    # Section placement map  
+pokered.sym    # Symbol addresses
+```
+
+The `.map` file shows exactly where each section was placed:
+
+```
+ROM0 bank #0:
+  SECTION: "Home"
+    $0150 = Start
+    $0160 = Init
+    ...
+
+ROMX bank #1:
+  SECTION: "bank1"  
+    $4000 = FacingData
+    $4050 = BlackOut
+    ...
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Bank System" href="/architecture/bank-system" icon="layer-group">
+    Learn how to switch banks and make far calls
+  </Card>
+  <Card title="Memory Layout" href="/architecture/memory-layout" icon="memory">
+    Understand RAM organization
+  </Card>
+</CardGroup>

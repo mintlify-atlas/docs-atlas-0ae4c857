@@ -1,0 +1,623 @@
+---
+title: Custom Tools
+description: Overview of the custom build tools used in the disassembly
+---
+
+## Overview
+
+The Pokémon Red/Blue disassembly includes several custom C tools in the `tools/` directory that handle specialized tasks during the build process. These tools are automatically compiled when you build the ROM.
+
+## Building the Tools
+
+Tools are built automatically during ROM compilation, but you can build them separately:
+
+```bash
+make tools
+```
+
+This compiles all tools using the configuration in `tools/Makefile`:
+
+```makefile
+CC := gcc
+CFLAGS := -O3 -std=c11 -Wall -Wextra -pedantic
+```
+
+<Info>
+Tools are built with optimization level O3 and strict C11 compliance. They depend on `common.h` for shared utilities.
+</Info>
+
+## Tool Overview
+
+Four main tools are provided:
+
+<CardGroup cols={2}>
+  <Card title="gfx" icon="image">
+    Advanced graphics processing and tile manipulation
+  </Card>
+  
+  <Card title="pkmncompress" icon="compress">
+    Pokémon sprite compression and decompression
+  </Card>
+  
+  <Card title="scan_includes" icon="magnifying-glass">
+    Assembly dependency scanning and tree building
+  </Card>
+  
+  <Card title="make_patch" icon="file-code">
+    Virtual Console patch generation
+  </Card>
+</CardGroup>
+
+---
+
+## gfx
+
+**Source:** `tools/gfx.c`
+
+**Purpose:** Post-processes Game Boy graphics files after rgbgfx conversion, providing advanced tile manipulation features that rgbgfx doesn't support.
+
+### Usage
+
+```bash
+tools/gfx [OPTIONS] infile
+```
+
+### Options
+
+<AccordionGroup>
+  <Accordion title="--trim-whitespace">
+    Removes trailing blank (all-zero) tiles from the end of a graphic.
+    
+    **Use case:** Reduce file size by removing unused tiles at the end.
+    
+    **Example:**
+    ```makefile
+    gfx/battle/move_anim_0.2bpp: tools/gfx += --trim-whitespace
+    ```
+  </Accordion>
+
+  <Accordion title="--remove-whitespace">
+    Removes all blank tiles from anywhere in the graphic.
+    
+    **Use case:** Compact graphics by eliminating all empty tiles.
+    
+    **Note:** Changes tile indices, so use with caution.
+  </Accordion>
+
+  <Accordion title="--interleave">
+    Interleaves tiles in a 2D pattern for certain graphics formats.
+    
+    **Requires:** `--png` option to determine image dimensions.
+    
+    **Use case:** Convert row-major tiles to Game Boy's interleaved format.
+    
+    **Example:**
+    ```makefile
+    gfx/credits/the_end.2bpp: tools/gfx += --interleave --png=$<
+    ```
+  </Accordion>
+
+  <Accordion title="--remove-duplicates">
+    Removes duplicate tiles, keeping only the first occurrence.
+    
+    **Use case:** Reduce ROM size by deduplicating tiles.
+    
+    **Example:**
+    ```makefile
+    gfx/trade/game_boy.2bpp: tools/gfx += --remove-duplicates
+    ```
+  </Accordion>
+
+  <Accordion title="--keep-whitespace">
+    When used with `--remove-duplicates`, preserves blank tiles even if duplicated.
+    
+    **Use case:** Maintain empty tiles for proper spacing.
+  </Accordion>
+
+  <Accordion title="--remove-xflip">
+    Removes tiles that are horizontal flips of earlier tiles.
+    
+    **Use case:** Reduce size for graphics where hardware flipping will be used.
+  </Accordion>
+
+  <Accordion title="--remove-yflip">
+    Removes tiles that are vertical flips of earlier tiles.
+    
+    **Use case:** Reduce size for graphics where hardware flipping will be used.
+  </Accordion>
+
+  <Accordion title="--preserve indexes">
+    Comma-separated list of tile indices to preserve from removal.
+    
+    **Use case:** Keep specific tiles even if they would otherwise be removed.
+    
+    **Example:**
+    ```makefile
+    gfx/intro/gengar.2bpp: tools/gfx += --remove-duplicates --preserve=0x19,0x76
+    ```
+  </Accordion>
+
+  <Accordion title="-d, --depth depth">
+    Bits per pixel (default: 2).
+    
+    **Values:** 1 or 2
+    
+    **Use case:** Process 1bpp graphics.
+  </Accordion>
+
+  <Accordion title="-p, --png filename.png">
+    Source PNG file for dimension information.
+    
+    **Required for:** `--interleave` option
+  </Accordion>
+
+  <Accordion title="-o, --out outfile">
+    Write processed output to specified file.
+    
+    **Note:** Without this, no output is written.
+  </Accordion>
+</AccordionGroup>
+
+### Examples
+
+<CodeGroup>
+```bash Trim Whitespace
+tools/gfx --trim-whitespace -o output.2bpp input.2bpp
+```
+
+```bash Remove Duplicates
+tools/gfx --remove-duplicates --preserve=0x00,0x10 -o output.2bpp input.2bpp
+```
+
+```bash Interleave Tiles
+tools/gfx --interleave --png=source.png -o output.2bpp input.2bpp
+```
+
+```bash Complex Processing
+tools/gfx --remove-duplicates --remove-xflip --remove-yflip --trim-whitespace -o output.2bpp input.2bpp
+```
+</CodeGroup>
+
+### How It Works
+
+1. **Tile Processing:** Operates on 8×8 pixel tiles (16 bytes for 2bpp, 8 bytes for 1bpp)
+2. **Whitespace Detection:** Identifies tiles where all bytes are 0x00
+3. **Duplicate Detection:** Compares tiles byte-by-byte
+4. **Flip Detection:** Uses a lookup table to detect flipped tiles efficiently
+5. **Preservation:** Maintains specified tile indices regardless of other operations
+
+---
+
+## pkmncompress
+
+**Source:** `tools/pkmncompress.c`
+
+**Purpose:** Compresses and decompresses Pokémon sprites using the game's custom compression algorithm.
+
+### Usage
+
+<CodeGroup>
+```bash Compress
+tools/pkmncompress input.2bpp output.pic
+```
+
+```bash Decompress
+tools/pkmncompress --uncompress input.pic output.2bpp
+```
+</CodeGroup>
+
+### Options
+
+- `-u, --uncompress` - Decompress instead of compress
+- `-h, --help` - Show help message
+
+### Compression Algorithm
+
+The tool implements the custom Pokémon sprite compression used in Gen 1:
+
+<Steps>
+  <Step title="Transpose Tiles">
+    Reorganizes tiles in the sprite into a transposed layout for better compression.
+  </Step>
+
+  <Step title="Separate Bit Planes">
+    Splits 2bpp data into two separate 1bpp planes:
+    - Plane 0: Lower bit of each pixel
+    - Plane 1: Upper bit of each pixel
+  </Step>
+
+  <Step title="Apply Gray Coding">
+    Converts each 4-bit nybble using Gray code to reduce bit transitions.
+    
+    This improves RLE compression efficiency.
+  </Step>
+
+  <Step title="RLE Encoding">
+    Run-length encodes each plane:
+    - Alternates between data packets and zero runs
+    - Uses variable-length encoding for run lengths
+    - Encodes data as 2-bit groups
+  </Step>
+
+  <Step title="Try All Modes">
+    Tests three compression modes:
+    - Mode 0: Both planes independent
+    - Mode 1: Plane 1 XORed with plane 0, plane 1 not Gray-coded
+    - Mode 2: Plane 1 XORed with plane 0, both Gray-coded
+    
+    Selects the mode that produces the smallest output.
+  </Step>
+
+  <Step title="Try Both Orders">
+    Tests encoding plane 0 first vs plane 1 first.
+    
+    Chooses the order with better compression.
+  </Step>
+</Steps>
+
+### Format
+
+**Compressed format:**
+- Header byte: `(width << 4) | height` in tiles
+- Mode and order bits
+- RLE-encoded bit groups for both planes
+
+**Constraints:**
+- Maximum size: 15×15 tiles (limited by header format)
+- Input must be square (equal width and height)
+
+<Note>
+Pokémon sprites in Gen 1 are typically 7×7, 6×6, or 5×5 tiles. The compression achieves roughly 50-60% size reduction.
+</Note>
+
+### Examples
+
+<CodeGroup>
+```bash Compress a Sprite
+# Convert PNG to 2bpp
+rgbgfx -o bulbasaur.2bpp bulbasaur.png
+
+# Compress to .pic format
+tools/pkmncompress bulbasaur.2bpp bulbasaur.pic
+```
+
+```bash Decompress for Viewing
+# Extract compressed sprite
+tools/pkmncompress -u bulbasaur.pic bulbasaur_out.2bpp
+
+# Convert back to PNG
+rgbgfx -d -o bulbasaur_out.png bulbasaur_out.2bpp
+```
+</CodeGroup>
+
+---
+
+## scan_includes
+
+**Source:** `tools/scan_includes.c`
+
+**Purpose:** Recursively scans assembly files for INCLUDE and INCBIN directives to build a complete dependency tree.
+
+### Usage
+
+```bash
+tools/scan_includes filename.asm
+```
+
+### Options
+
+- `-s, --strict` - Exit with error if included files don't exist
+- `-h, --help` - Show help message
+
+### How It Works
+
+<Steps>
+  <Step title="Parse Assembly File">
+    Reads the input assembly file and scans for directives.
+  </Step>
+
+  <Step title="Skip Comments and Strings">
+    Ignores `;` comments and `"` string literals to avoid false matches.
+  </Step>
+
+  <Step title="Find Directives">
+    Identifies `INCLUDE` and `INCBIN` directives (case-insensitive).
+    
+    Validates they appear as complete tokens, not within other words.
+  </Step>
+
+  <Step title="Extract Paths">
+    Parses the quoted file path after each directive.
+  </Step>
+
+  <Step title="Recursive Scan">
+    For INCLUDE directives, recursively scans the included file.
+    
+    INCBIN files are listed but not scanned (binary data).
+  </Step>
+
+  <Step title="Output Dependencies">
+    Prints all dependencies as a space-separated list.
+  </Step>
+</Steps>
+
+### Integration with Makefile
+
+The Makefile uses scan_includes to auto-generate dependencies:
+
+```makefile
+preinclude_deps := includes.asm $(shell tools/scan_includes includes.asm)
+define DEP
+$1: $2 $$(shell tools/scan_includes $2) $(preinclude_deps) | rgbdscheck.o
+    $$(RGBASM) $$(RGBASMFLAGS) -o $$@ $$<
+endef
+```
+
+This ensures that when any included file changes, all affected object files are rebuilt.
+
+### Example Output
+
+```bash
+$ tools/scan_includes main.asm
+constants.asm macros.asm home.asm home/text.asm home/serial.asm data/items.asm
+```
+
+<Info>
+The tool builds a complete transitive closure of all dependencies, ensuring no included file is missed.
+</Info>
+
+---
+
+## make_patch
+
+**Source:** `tools/make_patch.c`
+
+**Purpose:** Generates Virtual Console (3DS) patch files by comparing original and modified ROMs.
+
+### Usage
+
+```bash
+tools/make_patch [--ignore addr:size] values.sym patched.gbc original.gbc vc.patch.template vc.patch
+```
+
+### Arguments
+
+1. **values.sym** - Symbol file from the VC build
+2. **patched.gbc** - Modified ROM (e.g., `pokered_vc.gbc`)
+3. **original.gbc** - Original ROM (e.g., `pokered.gbc`)
+4. **vc.patch.template** - Template file with patch directives
+5. **vc.patch** - Output patch file
+
+### Options
+
+- `--ignore addr:size` - Ignore differences at specific address ranges
+
+### How It Works
+
+<Steps>
+  <Step title="Parse Symbols">
+    Reads the `.sym` file to map label names to ROM offsets.
+    
+    Handles bank:address format and local labels.
+  </Step>
+
+  <Step title="Process Template">
+    Reads the template file and interprets special directives:
+    
+    - `{patch}` - Insert ROM bytes from patch location
+    - `{hex SYMBOL}` - Insert symbol address as hex
+    - `{db VALUE}` - Insert byte value
+    - `{dws ...}` - Insert word values
+    - `[Label@Symbol]` - Mark patch location
+  </Step>
+
+  <Step title="Extract Differences">
+    Compares patched ROM and original ROM byte-by-byte.
+    
+    Extracts changed bytes at addresses marked in template.
+  </Step>
+
+  <Step title="Generate Patch">
+    Outputs a completed patch file with:
+    - Literal ROM data from changed regions
+    - Computed addresses and values
+    - Proper formatting for the VC patcher
+  </Step>
+
+  <Step title="Verify Completeness">
+    Checks that all ROM differences are covered by patch directives.
+    
+    Warns about unpatched differences.
+  </Step>
+</Steps>
+
+### Template Commands
+
+<AccordionGroup>
+  <Accordion title="{patch} / {PATCH}">
+    Extracts bytes from the current patch location.
+    
+    **Format:** `{patch}` for lowercase hex, `{PATCH}` for uppercase
+    
+    **Example:**
+    ```
+    [RedVC_SaveMenu@Redvc_mainmenu]
+    v: {patch}
+    ```
+  </Accordion>
+
+  <Accordion title="{patch OFFSET SIZE}">
+    Extracts bytes at an offset from the patch location.
+    
+    **Example:**
+    ```
+    {patch +4 8}  ; 8 bytes starting 4 bytes after patch location
+    ```
+  </Accordion>
+
+  <Accordion title="{hex SYMBOL}">
+    Inserts the address of a symbol as hexadecimal.
+    
+    **Example:**
+    ```
+    addr: {hex NewFunction}
+    ```
+  </Accordion>
+
+  <Accordion title="{db VALUE}">
+    Inserts a single byte value.
+    
+    **Example:**
+    ```
+    {db <NewFunction}  ; Low byte of address
+    {db >NewFunction}  ; High byte of address
+    ```
+  </Accordion>
+
+  <Accordion title="{dws VALUE...}">
+    Inserts one or more word (16-bit) values in little-endian.
+    
+    **Example:**
+    ```
+    {dws NewFunction OtherFunction}
+    ```
+  </Accordion>
+
+  <Accordion title="[Label@Symbol]">
+    Marks a patch location and sets the current context.
+    
+    **Example:**
+    ```
+    [SaveMenu@Redvc_mainmenu]
+    ```
+    
+    The `@Symbol` part must match a `.VC_*` symbol in the assembly.
+  </Accordion>
+</AccordionGroup>
+
+### Virtual Console Patches
+
+The Makefile generates VC patches:
+
+```makefile
+%.patch: %_vc.gbc %.gbc vc/%.patch.template
+    tools/make_patch $*_vc.sym $^ $@
+```
+
+<Note>
+Virtual Console releases include various fixes and enhancements. The patch format allows Nintendo's VC emulator to apply modifications to the original ROM.
+</Note>
+
+---
+
+## Common Tool Workflow
+
+Here's how the tools work together during a build:
+
+<Steps>
+  <Step title="Tool Compilation">
+    ```bash
+    make -C tools/
+    ```
+    Compiles all four tools from C source.
+  </Step>
+
+  <Step title="Dependency Scanning">
+    ```bash
+    tools/scan_includes main.asm
+    ```
+    Determines which files need to be reassembled.
+  </Step>
+
+  <Step title="Graphics Processing">
+    ```bash
+    rgbgfx -o sprite.2bpp sprite.png
+    tools/gfx --remove-duplicates -o sprite.2bpp sprite.2bpp
+    ```
+    Converts and optimizes graphics.
+  </Step>
+
+  <Step title="Sprite Compression">
+    ```bash
+    tools/pkmncompress sprite.2bpp sprite.pic
+    ```
+    Compresses Pokémon sprites.
+  </Step>
+
+  <Step title="Assembly and Linking">
+    ```bash
+    rgbasm -o main.o main.asm
+    rgblink -o game.gbc *.o
+    ```
+    Assembles and links the ROM.
+  </Step>
+
+  <Step title="VC Patch Generation">
+    ```bash
+    tools/make_patch game_vc.sym game_vc.gbc game.gbc template.asm patch.bin
+    ```
+    Creates Virtual Console patches (if building VC version).
+  </Step>
+</Steps>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Tools fail to compile">
+    **Problem:** Compilation errors when running `make tools`.
+    
+    **Solution:**
+    - Ensure gcc or clang is installed
+    - Check that you have C11 support
+    - Verify `common.h` exists in the tools directory
+  </Accordion>
+
+  <Accordion title="gfx tool removes wrong tiles">
+    **Problem:** Important tiles are removed by processing.
+    
+    **Solution:**
+    - Use `--preserve` to protect specific tile indices
+    - Check that tile indices are calculated correctly
+    - Try different option combinations
+  </Accordion>
+
+  <Accordion title="pkmncompress fails on non-square images">
+    **Problem:** Error about image not being square.
+    
+    **Solution:**
+    - Pokémon sprites must be square (NxN tiles)
+    - Maximum size is 15×15 tiles
+    - Ensure input is in 2bpp format
+  </Accordion>
+
+  <Accordion title="scan_includes misses dependencies">
+    **Problem:** Files not rebuilding when includes change.
+    
+    **Solution:**
+    - Check INCLUDE directives use proper quotes
+    - Verify paths are correct
+    - Try `make clean` then `make` to rebuild all
+  </Accordion>
+
+  <Accordion title="make_patch reports unpatched differences">
+    **Problem:** Warning about ROM differences not in patch.
+    
+    **Solution:**
+    - Add new patches to the template file
+    - Use `--ignore` for intentional differences
+    - Verify symbols exist in the .sym file
+  </Accordion>
+</AccordionGroup>
+
+## Extending the Tools
+
+All tools are open source and can be modified:
+
+1. **Edit the source** - Modify `.c` files in `tools/`
+2. **Add new options** - Extend the argument parsing
+3. **Test thoroughly** - Verify with existing graphics/ROMs
+4. **Rebuild** - Run `make tools` to recompile
+
+<Tip>
+The tools use a shared `common.h` header with utility functions for file I/O, error handling, and memory management. Start there when adding new functionality.
+</Tip>

@@ -1,0 +1,523 @@
+---
+title: Contributing
+description: How to contribute to the Pokémon Red/Blue disassembly project
+---
+
+## Welcome Contributors
+
+The Pokémon Red/Blue disassembly is a community project maintained by **pret** (Pokémon Reverse Engineering Team). We welcome contributions of all kinds, from documentation improvements to code cleanup to new discoveries.
+
+## Getting Started
+
+Before contributing, make sure you can build the project:
+
+<Steps>
+  <Step title="Fork the Repository">
+    Visit [github.com/pret/pokered](https://github.com/pret/pokered) and click "Fork" to create your own copy.
+  </Step>
+
+  <Step title="Clone Your Fork">
+    ```bash
+    git clone https://github.com/YOUR_USERNAME/pokered.git
+    cd pokered
+    ```
+  </Step>
+
+  <Step title="Build the ROM">
+    ```bash
+    make
+    ```
+    
+    Verify you can build successfully before making changes.
+  </Step>
+
+  <Step title="Verify Matching Build">
+    ```bash
+    make compare
+    ```
+    
+    This confirms your build matches the original ROMs.
+  </Step>
+</Steps>
+
+<Note>
+If `make compare` fails on a fresh clone, there's an issue with your build environment. Ask for help on Discord before continuing.
+</Note>
+
+## Types of Contributions
+
+### Code Improvements
+
+**What we're looking for:**
+
+<CardGroup cols={2}>
+  <Card title="Label Names" icon="tag">
+    Rename generic labels to descriptive names that explain what the code does.
+  </Card>
+
+  <Card title="Function Documentation" icon="comment">
+    Add comments explaining complex routines, algorithms, and data structures.
+  </Card>
+
+  <Card title="Data Identification" icon="database">
+    Identify unknown data blocks and convert them to proper structures.
+  </Card>
+
+  <Card title="Macro Creation" icon="code">
+    Create macros to make repeated patterns more readable.
+  </Card>
+
+  <Card title="Code Organization" icon="folder-tree">
+    Reorganize files to group related functionality together.
+  </Card>
+
+  <Card title="Bug Documentation" icon="bug">
+    Document known bugs and their behavior in the original game.
+  </Card>
+</CardGroup>
+
+### Documentation
+
+- **Wiki articles** - Tutorials and explanations
+- **Code comments** - Inline documentation
+- **README updates** - Improve setup instructions
+- **Technical documentation** - Document game mechanics
+
+### Bug Fixes
+
+<Warning>
+The primary goal is to **disassemble** the original game, not fix its bugs. However, documenting bugs is valuable.
+</Warning>
+
+**Acceptable bug-related contributions:**
+- Documenting bugs with comments
+- Creating separate branches with bug fixes
+- Explaining why bugs exist in the original code
+
+**Not acceptable:**
+- Fixing bugs in the main branch (breaks matching build)
+
+## Contribution Guidelines
+
+### Code Style
+
+Follow the existing code style:
+
+<Tabs>
+  <Tab title="Labels">
+    **Function labels:** `PascalCase`
+    ```asm
+    HandleMenuInput:
+        ; code here
+    ```
+    
+    **Local labels:** `.camelCase` starting with a dot
+    ```asm
+    .loop
+        ; code here
+        jr .loop
+    ```
+    
+    **Data labels:** `PascalCase` or `SCREAMING_SNAKE_CASE` for constants
+    ```asm
+    PokemonNames:
+    MAX_PARTY_SIZE EQU 6
+    ```
+  </Tab>
+
+  <Tab title="Indentation">
+    **Use tabs** for indentation:
+    ```asm
+    Function:
+    	ld a, 5        ; instruction
+    	ld [wValue], a ; store
+    	ret
+    ```
+    
+    **Align comments** at column 40 if space allows:
+    ```asm
+    	ld a, [wPartyCount]              ; get party size
+    	call PrintNumber                  ; display it
+    ```
+  </Tab>
+
+  <Tab title="Comments">
+    **Use comments to explain intent:**
+    ```asm
+    ; Calculate damage: (Attack * 2 / 5) + 2
+    	ld a, [wAttack]
+    	sla a           ; multiply by 2
+    	ld b, 5
+    	call DivideAByB
+    	add 2
+    ```
+    
+    **Not the obvious:**
+    ```asm
+    ; BAD: Don't state the obvious
+    	ld a, 5         ; load 5 into a
+    	
+    ; GOOD: Explain why
+    	ld a, 5         ; set battle type to Old Man tutorial
+    ```
+  </Tab>
+
+  <Tab title="Constants">
+    **Use constants instead of magic numbers:**
+    ```asm
+    ; BAD
+    	ld a, 151
+    	cp [hl]
+    	
+    ; GOOD
+    	ld a, MEW
+    	cp [hl]
+    ```
+    
+    **Define constants at the top of files or in constants/**:
+    ```asm
+    DEF PARTY_LENGTH EQU 6
+    DEF NAME_LENGTH EQU 11
+    ```
+  </Tab>
+</Tabs>
+
+### Testing Your Changes
+
+<Steps>
+  <Step title="Build Successfully">
+    ```bash
+    make clean
+    make
+    ```
+    
+    Ensure no compilation errors.
+  </Step>
+
+  <Step title="Verify Matching Build">
+    ```bash
+    make compare
+    ```
+    
+    **This must pass.** Your changes should not alter the generated ROM unless you're intentionally making a non-matching change (rare and requires approval).
+  </Step>
+
+  <Step title="Test with DEBUG=1">
+    ```bash
+    make clean
+    make DEBUG=1 compare
+    ```
+    
+    Verify symbols are generated correctly.
+  </Step>
+
+  <Step title="Test in Emulator">
+    Load the ROM in BGB, mGBA, or another emulator.
+    
+    - Navigate to affected code areas
+    - Test any functionality you documented
+    - Verify behavior matches the original
+  </Step>
+
+  <Step title="Check Formatting">
+    Review your changes:
+    ```bash
+    git diff
+    ```
+    
+    - No trailing whitespace
+    - Consistent indentation (tabs)
+    - No unintended changes
+  </Step>
+</Steps>
+
+<Info>
+`make compare` uses SHA-1 checksums to verify your ROM matches the original exactly. This is the gold standard for disassembly projects.
+</Info>
+
+## Submitting Changes
+
+### Creating a Pull Request
+
+<Steps>
+  <Step title="Create a Branch">
+    ```bash
+    git checkout -b descriptive-branch-name
+    ```
+    
+    Use descriptive names like `document-battle-system` or `rename-menu-functions`.
+  </Step>
+
+  <Step title="Make Your Changes">
+    Edit files, test thoroughly, and commit:
+    ```bash
+    git add .
+    git commit -m "Document the DoBattleMenu function"
+    ```
+  </Step>
+
+  <Step title="Write a Good Commit Message">
+    **Good commit messages:**
+    - "Document the battle damage calculation"
+    - "Rename generic labels in the menu system"
+    - "Identify wUnknownData as wTempMoveData"
+    
+    **Bad commit messages:**
+    - "Update main.asm"
+    - "Changes"
+    - "Fixed stuff"
+  </Step>
+
+  <Step title="Push to GitHub">
+    ```bash
+    git push origin descriptive-branch-name
+    ```
+  </Step>
+
+  <Step title="Open Pull Request">
+    1. Go to your fork on GitHub
+    2. Click "Pull Request"
+    3. Select your branch
+    4. Write a description of your changes
+    5. Submit the PR
+  </Step>
+</Steps>
+
+### Pull Request Description
+
+Include in your PR description:
+
+- **What changed:** Brief summary of modifications
+- **Why:** Explanation of the improvement
+- **Testing:** How you verified it still matches
+- **References:** Link to wiki pages, issues, or research
+
+**Example:**
+
+```markdown
+## Summary
+This PR documents the battle damage calculation functions in `engine/battle/core.asm`.
+
+## Changes
+- Renamed `Func_3c000` to `CalculateDamage`
+- Added comments explaining the damage formula
+- Identified data structure at `wBattleTempData`
+
+## Testing
+- `make compare` passes
+- Verified in BGB debugger that function is called during battle
+- Checked against similar code in pokeyellow
+
+## References
+- [Damage Calculation Wiki](https://bulbapedia.bulbagarden.net/wiki/Damage)
+```
+
+## Community Guidelines
+
+### Getting Help
+
+<CardGroup cols={2}>
+  <Card title="Discord" icon="discord">
+    [pret Discord](https://discord.gg/d5dubZ3)
+    
+    #pokered channel for questions and discussion
+  </Card>
+
+  <Card title="GitHub Issues" icon="github">
+    [pokered issues](https://github.com/pret/pokered/issues)
+    
+    Report bugs or discuss large changes
+  </Card>
+
+  <Card title="Wiki" icon="book">
+    [pokered wiki](https://github.com/pret/pokered/wiki)
+    
+    Tutorials and documentation
+  </Card>
+
+  <Card title="Symbols Branch" icon="code-branch">
+    [Symbols reference](https://github.com/pret/pokered/tree/symbols)
+    
+    Complete symbol files
+  </Card>
+</CardGroup>
+
+### Best Practices
+
+<AccordionGroup>
+  <Accordion title="Start Small">
+    Begin with small contributions:
+    - Fix typos in comments
+    - Rename a few labels
+    - Document a single function
+    
+    Build up to larger changes as you learn the codebase.
+  </Accordion>
+
+  <Accordion title="Ask Before Big Changes">
+    For major refactoring or reorganization:
+    1. Open an issue describing your plan
+    2. Get feedback from maintainers
+    3. Proceed once there's consensus
+    
+    This avoids wasted effort on changes that won't be accepted.
+  </Accordion>
+
+  <Accordion title="One Thing Per PR">
+    Keep pull requests focused:
+    - One feature or improvement
+    - Related changes grouped together
+    - Easier to review and merge
+    
+    Split unrelated changes into separate PRs.
+  </Accordion>
+
+  <Accordion title="Reference Your Research">
+    When documenting game mechanics:
+    - Link to Bulbapedia articles
+    - Reference other gen 1 games (Yellow, GSC)
+    - Cite community research
+    
+    This helps reviewers verify accuracy.
+  </Accordion>
+
+  <Accordion title="Be Patient">
+    Maintainers review PRs as time permits:
+    - May take days or weeks for review
+    - Feedback may request changes
+    - Discussion is part of the process
+    
+    Be responsive to feedback and willing to revise.
+  </Accordion>
+</AccordionGroup>
+
+### Code of Conduct
+
+- **Be respectful** - Treat all contributors with kindness
+- **Be constructive** - Focus on improving the project
+- **Be patient** - Not everyone has the same skill level
+- **Be collaborative** - Work together toward common goals
+- **Be open-minded** - Consider different perspectives
+
+## Advanced Topics
+
+### Comparing with Other Games
+
+When documenting code, compare with:
+
+- **Pokémon Yellow** - [pret/pokeyellow](https://github.com/pret/pokeyellow)
+- **Pokémon Gold/Silver** - [pret/pokegold](https://github.com/pret/pokegold)
+- **Japanese Red/Green** - Similar code, different versions
+
+<Tip>
+Many functions are identical across games. If something is documented in Yellow, you can often apply the same labels to Red/Blue.
+</Tip>
+
+### Understanding the Build System
+
+**Key files to understand:**
+
+- `Makefile` - Build rules and targets
+- `layout.link` - Memory layout
+- `rgbdscheck.asm` - RGBDS version verification
+- `includes.asm` - Common definitions pre-included in all files
+
+### Working with Graphics
+
+**Graphics workflow:**
+
+1. Export PNG from ROM using tools
+2. Edit PNG in graphics editor
+3. Convert back to 2bpp with rgbgfx
+4. Process with gfx tool if needed
+5. Compress Pokémon sprites with pkmncompress
+
+**Resources:**
+
+- [gb-asm-tools](https://github.com/pret/gb-asm-tools) - Additional utilities
+- [GB Studio](https://www.gbstudio.dev/) - Visual Game Boy tools
+- [RGBDS documentation](https://rgbds.gbdev.io/) - Toolchain reference
+
+### Finding Undocumented Code
+
+**Areas that need work:**
+
+1. Search for `Func_` or `Unknown` in the codebase
+2. Check for generic labels like `asm_` or `Data_`
+3. Look for sparse comments
+4. Compare with pokeyellow to find documented equivalents
+
+```bash
+# Find functions that need names
+grep -r "Func_" --include="*.asm"
+
+# Find unknown data
+grep -r "Unknown" --include="*.asm"
+```
+
+## Recognition
+
+Major contributors are listed in the project's commit history and may be mentioned in the README. The pret community values all contributions, large and small.
+
+**Notable contributions that make a difference:**
+
+- Documenting entire game systems (battle, menu, map)
+- Identifying and labeling large data structures
+- Creating comprehensive wiki articles
+- Mentoring new contributors
+
+## Additional Resources
+
+### Related Projects
+
+- [pokeyellow](https://github.com/pret/pokeyellow) - Pokémon Yellow
+- [pokegold](https://github.com/pret/pokegold) - Pokémon Gold/Silver
+- [pokecrystal](https://github.com/pret/pokecrystal) - Pokémon Crystal
+- [pokepinball](https://github.com/pret/pokepinball) - Pokémon Pinball
+- [poketcg](https://github.com/pret/poketcg) - Pokémon TCG
+
+### Learning Resources
+
+<CardGroup cols={2}>
+  <Card title="Game Boy ASM Tutorial" icon="graduation-cap">
+    [GB ASM Tutorial](https://eldred.fr/gb-asm-tutorial/)
+    
+    Learn Game Boy assembly from scratch
+  </Card>
+
+  <Card title="Pan Docs" icon="file-text">
+    [Pan Docs](https://gbdev.io/pandocs/)
+    
+    Complete Game Boy technical reference
+  </Card>
+
+  <Card title="RGBDS Documentation" icon="book-open">
+    [RGBDS Docs](https://rgbds.gbdev.io/)
+    
+    Assembler and toolchain documentation
+  </Card>
+
+  <Card title="Awesome Game Boy Dev" icon="star">
+    [Awesome List](https://github.com/gbdev/awesome-gbdev)
+    
+    Curated Game Boy development resources
+  </Card>
+</CardGroup>
+
+### Debugging Resources
+
+- **BGB** - [bgb.bircd.org](https://bgb.bircd.org/) - Best Windows debugger
+- **Emulicious** - [emulicious.net](https://emulicious.net/) - Cross-platform with great debugging
+- **SameBoy** - [github.com/LIJI32/SameBoy](https://github.com/LIJI32/SameBoy) - Accurate emulator with debugger
+
+## Thank You
+
+Thank you for contributing to the Pokémon Red/Blue disassembly project. Every contribution helps preserve and understand this classic game's code.
+
+<Tip>
+Don't be intimidated if you're new to assembly or disassembly projects. Everyone starts somewhere, and the community is here to help you learn.
+</Tip>
+
+**Join us on Discord:** [discord.gg/d5dubZ3](https://discord.gg/d5dubZ3) (#pokered channel)
+
+**Project repository:** [github.com/pret/pokered](https://github.com/pret/pokered)

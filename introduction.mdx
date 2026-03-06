@@ -1,0 +1,150 @@
+---
+title: Introduction
+description: Learn about the Pokémon Red and Blue disassembly project and what you can accomplish with it
+---
+
+## What is the Pokémon Red/Blue Disassembly?
+
+This project is a **complete disassembly** of the original Pokémon Red and Blue Game Boy games into human-readable assembly language. A disassembly converts compiled machine code back into source code that can be read, understood, modified, and reassembled into working ROMs.
+
+The disassembly recreates the exact original games - when built, it produces byte-for-byte identical ROMs to the original releases:
+
+- **Pokémon Red (UE) [S][!].gb** - SHA1: `ea9bcae617fdf159b045185467ae58b2e4a48b9a`
+- **Pokémon Blue (UE) [S][!].gb** - SHA1: `d7037c83e1ae5b39bde3c30787637ba1d4c48ce2`
+- **BLUEMONS.GB (debug build)** - SHA1: `5b1456177671b79b263c614ea0e7cc9ac542e9c4`
+
+## Why Does This Matter?
+
+Understanding how these classic games work at the assembly level opens up incredible possibilities:
+
+<CardGroup cols={2}>
+  <Card title="Learn Game Development" icon="graduation-cap">
+    Study the techniques used by Game Freak to create one of the most successful games of all time
+  </Card>
+  <Card title="Create ROM Hacks" icon="wand-magic-sparkles">
+    Modify the games to create entirely new Pokémon experiences with custom features
+  </Card>
+  <Card title="Fix Bugs" icon="bug">
+    Discover and fix original bugs like the Mew glitch or battle mechanics issues
+  </Card>
+  <Card title="Research & Documentation" icon="book">
+    Document game mechanics, understand data structures, and preserve gaming history
+  </Card>
+</CardGroup>
+
+## Project Structure
+
+The disassembly is organized into logical sections that mirror how the original game was structured:
+
+```bash
+pokered/
+├── audio.asm          # Sound and music engine
+├── main.asm           # Core game logic organized by ROM banks
+├── home.asm           # Essential functions in home bank
+├── maps.asm           # Map data and scripts
+├── text.asm           # All in-game text and dialogue
+├── constants/         # Game constants (items, moves, Pokémon, etc.)
+├── data/              # Game data (stats, moves, sprites)
+├── engine/            # Core game systems (battle, menus, overworld)
+├── gfx/               # Graphics data
+└── Makefile           # Build configuration
+```
+
+<Info>
+The project uses **RGBDS** (Rednex Game Boy Development System) to assemble the source files into Game Boy ROMs.
+</Info>
+
+## Key Features
+
+### Complete Documentation
+
+Every function, data table, and constant has been carefully labeled and documented. Instead of cryptic memory addresses, you'll find readable labels like:
+
+```asm
+; From engine/battle/core.asm
+CalculateDamage:
+    ; Calculate damage for a move
+    ld a, [wDamage]
+    ld b, a
+    ; ... damage calculation logic
+```
+
+### Modular Organization
+
+The code is split into logical modules by functionality:
+
+- **Engine**: Battle system, overworld movement, menus, events
+- **Data**: Pokémon stats, move data, trainer parties, item prices
+- **Maps**: Town and route layouts, NPC scripts, wild encounters
+- **Graphics**: Sprites, tilesets, animations
+
+### Build System
+
+A robust Makefile handles building both Red and Blue versions, including:
+
+- Debug builds with enhanced features
+- Virtual Console patches for 3DS releases
+- Automatic dependency tracking
+- Graphics conversion from PNG to Game Boy format
+
+## What You Can Do
+
+With this disassembly, you can:
+
+<Steps>
+  <Step title="Study the Code">
+    Understand how classic Game Boy games were developed, including memory management, graphics rendering, and game logic
+  </Step>
+  <Step title="Modify Game Mechanics">
+    Change battle formulas, type effectiveness, experience curves, or add entirely new mechanics
+  </Step>
+  <Step title="Add New Content">
+    Create new Pokémon, moves, items, maps, or trainers
+  </Step>
+  <Step title="Fix Original Bugs">
+    Correct bugs from the original games or balance issues
+  </Step>
+  <Step title="Create Tools">
+    Build tools that generate data for the disassembly or extract information
+  </Step>
+</Steps>
+
+<Warning>
+This project is for **educational and research purposes**. Creating and distributing ROM hacks may have legal implications depending on your jurisdiction.
+</Warning>
+
+## Community and Resources
+
+The Pokémon reverse engineering community (pret) maintains this and many other Pokémon disassembly projects:
+
+- **[GitHub Wiki](https://github.com/pret/pokered/wiki)** - Comprehensive documentation and tutorials
+- **[Discord Server](https://discord.gg/d5dubZ3)** - Join #pokered channel for help and discussion
+- **[Symbols Branch](https://github.com/pret/pokered/tree/symbols)** - Memory addresses and symbols for debugging
+- **[GB ASM Tools](https://github.com/pret/gb-asm-tools)** - Useful development tools
+- **[pret.github.io](https://pret.github.io/)** - All pret disassembly projects
+
+## Prerequisites
+
+Before you begin, you should have:
+
+- Basic understanding of assembly language (or willingness to learn)
+- Familiarity with Git and command-line tools
+- A text editor for editing `.asm` files
+- Knowledge of how Game Boy games work (helpful but not required)
+
+<Tip>
+If you're new to assembly language, the [wiki tutorials](https://github.com/pret/pokered/wiki/Tutorials) provide beginner-friendly guides to get started.
+</Tip>
+
+## Next Steps
+
+Ready to get started? Follow these guides in order:
+
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/installation">
+    Set up RGBDS and required tools on your platform
+  </Card>
+  <Card title="Quick Start" icon="rocket" href="/quickstart">
+    Build your first ROM and verify it works
+  </Card>
+</CardGroup>
