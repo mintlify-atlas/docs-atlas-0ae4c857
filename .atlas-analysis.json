@@ -1,0 +1,89 @@
+{
+  "projectType": "general",
+  "projectName": "Pokémon Red/Blue Disassembly",
+  "projectDescription": "Complete disassembly of Pokémon Red and Blue Game Boy games in Z80 assembly",
+  "theme": "aspen",
+  "primaryColor": "#5c64f4",
+  "lightColor": "#acb4fc",
+  "darkColor": "#ffffff",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "installation",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Architecture",
+            "pages": [
+              "architecture/overview",
+              "architecture/game-boy-hardware",
+              "architecture/memory-layout",
+              "architecture/rom-structure",
+              "architecture/bank-system"
+            ]
+          },
+          {
+            "group": "Game Systems",
+            "pages": [
+              "game-systems/battle-engine",
+              "game-systems/overworld",
+              "game-systems/pokemon",
+              "game-systems/items",
+              "game-systems/trainers",
+              "game-systems/maps",
+              "game-systems/audio"
+            ]
+          },
+          {
+            "group": "Code Reference",
+            "pages": [
+              "reference/constants",
+              "reference/macros",
+              "reference/engine-modules",
+              "reference/data-structures"
+            ]
+          },
+          {
+            "group": "Development",
+            "pages": [
+              "development/building",
+              "development/debugging",
+              "development/tools",
+              "development/contributing"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Complete Z80 assembly disassembly of Pokémon Red and Blue",
+    "Builds byte-perfect ROMs matching original game checksums",
+    "Fully documented game systems including battle engine and overworld",
+    "Comprehensive constants and data structures for all game elements",
+    "Custom build tools for graphics compression and ROM patching",
+    "Support for Virtual Console builds and debug modes"
+  ],
+  "publicApiSurface": [
+    "Battle Engine (engine/battle/)",
+    "Overworld System (engine/overworld/)",
+    "Pokémon Data Structures (data/pokemon/)",
+    "Item System (engine/items/, data/items/)",
+    "Map System (maps/, data/maps/)",
+    "Audio Engine (audio/, engine/audio/)",
+    "Graphics Engine (engine/gfx/)",
+    "Menu System (engine/menus/)",
+    "Event System (engine/events/)",
+    "Link Cable System (engine/link/)",
+    "Constants (constants/)",
+    "Macros (macros/)",
+    "Build Tools (tools/)"
+  ]
+}
